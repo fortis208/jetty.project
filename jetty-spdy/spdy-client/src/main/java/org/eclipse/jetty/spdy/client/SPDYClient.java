@@ -46,6 +46,7 @@ import org.eclipse.jetty.spdy.api.Session;
 import org.eclipse.jetty.spdy.api.SessionFrameListener;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.FuturePromise;
+import org.eclipse.jetty.util.Promise;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
@@ -86,23 +87,36 @@ public class SPDYClient
         this.bindAddress = bindAddress;
     }
 
+    @Deprecated
     public Future<Session> connect(InetSocketAddress address, SessionFrameListener listener) throws IOException
+    {
+        FuturePromise<Session> promise = new FuturePromise<>();
+        connect(address, listener, promise);
+        return promise;
+    }
+
+    public void connect(SocketAddress address, SessionFrameListener listener, Promise<Session> promise)
     {
         if (!factory.isStarted())
             throw new IllegalStateException(Factory.class.getSimpleName() + " is not started");
 
-        SocketChannel channel = SocketChannel.open();
-        if (bindAddress != null)
-            channel.bind(bindAddress);
-        channel.socket().setTcpNoDelay(true);
-        channel.configureBlocking(false);
+        try
+        {
+            SocketChannel channel = SocketChannel.open();
+            if (bindAddress != null)
+                channel.bind(bindAddress);
+            channel.socket().setTcpNoDelay(true);
+            channel.configureBlocking(false);
 
-        SessionPromise result = new SessionPromise(channel, this, listener);
+            SessionPromise result = new SessionPromise(channel, this, listener);
 
-        channel.connect(address);
-        factory.selector.connect(channel, result);
-
-        return result;
+            channel.connect(address);
+            factory.selector.connect(channel, result);
+        }
+        catch (IOException x)
+        {
+            promise.failed(x);
+        }
     }
 
     public long getIdleTimeout()
