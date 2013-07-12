@@ -32,7 +32,7 @@ import org.eclipse.jetty.websocket.api.annotations.WebSocket;
 /**
  * Basic Echo Client Socket
  */
-@WebSocket(maxMessageSize = 64 * 1024)
+@WebSocket(maxTextMessageSize = 64 * 1024)
 public class SimpleEchoSocket
 {
     private final CountDownLatch closeLatch;

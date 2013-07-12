@@ -57,7 +57,15 @@ public class ServletUpgradeRequest extends UpgradeRequest
         setHttpVersion(request.getProtocol());
 
         // Copy parameters
-        super.setParameterMap(request.getParameterMap());
+        Map<String, List<String>> pmap = new HashMap<>();
+        if (request.getParameterMap() != null)
+        {
+            for (Map.Entry<String, String[]> entry : request.getParameterMap().entrySet())
+            {
+                pmap.put(entry.getKey(),Arrays.asList(entry.getValue()));
+            }
+        }
+        super.setParameterMap(pmap);
 
         // Copy Cookies
         Cookie rcookies[] = request.getCookies();

@@ -65,6 +65,11 @@ public class AnnotationConfiguration extends AbstractConfiguration
     }
 
    
+    public void addDiscoverableAnnotationHandler(DiscoverableAnnotationHandler handler)
+    {
+        _discoverableAnnotationHandlers.add(handler);
+    }
+
     @Override
     public void deconfigure(WebAppContext context) throws Exception
     {

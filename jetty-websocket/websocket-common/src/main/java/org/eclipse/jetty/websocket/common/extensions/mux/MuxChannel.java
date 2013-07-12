@@ -22,11 +22,11 @@ import java.net.InetSocketAddress;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.eclipse.jetty.io.ByteBufferPool;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.websocket.api.StatusCode;
 import org.eclipse.jetty.websocket.api.SuspendToken;
-import org.eclipse.jetty.websocket.api.WebSocketException;
 import org.eclipse.jetty.websocket.api.WebSocketPolicy;
 import org.eclipse.jetty.websocket.api.WriteCallback;
 import org.eclipse.jetty.websocket.api.extensions.Frame;
@@ -92,9 +92,23 @@ public class MuxChannel implements LogicalConnection, IncomingFrames, SuspendTok
         // TODO: disconnect the virtual end-point?
     }
 
+    @Override
+    public ByteBufferPool getBufferPool()
+    {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
     public long getChannelId()
     {
         return channelId;
+    }
+
+    @Override
+    public long getIdleTimeout()
+    {
+        // TODO Auto-generated method stub
+        return 0;
     }
 
     @Override
@@ -140,7 +154,7 @@ public class MuxChannel implements LogicalConnection, IncomingFrames, SuspendTok
      * Incoming exceptions from Muxer.
      */
     @Override
-    public void incomingError(WebSocketException e)
+    public void incomingError(Throwable e)
     {
         incoming.incomingError(e);
     }

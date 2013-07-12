@@ -18,7 +18,6 @@
 
 package org.eclipse.jetty.websocket.server.helper;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -44,14 +43,7 @@ public class CaptureSocket extends WebSocketAdapter
 
     public void close()
     {
-        try
-        {
-            getSession().close();
-        }
-        catch (IOException ignore)
-        {
-            /* ignore */
-        }
+        getSession().close();
     }
 
     @Override

@@ -19,8 +19,6 @@
 package org.eclipse.jetty.websocket.servlet;
 
 import java.io.IOException;
-import java.util.Iterator;
-import java.util.ServiceLoader;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -71,8 +69,11 @@ import org.eclipse.jetty.websocket.api.annotations.WebSocket;
  * <dt>maxIdleTime</dt>
  * <dd>set the time in ms that a websocket may be idle before closing<br>
  * 
- * <dt>maxMessagesSize</dt>
- * <dd>set the size in bytes that a websocket may be accept before closing<br>
+ * <dt>maxTextMessageSize</dt>
+ * <dd>set the size in UTF-8 bytes that a websocket may be accept as a Text Message before closing<br>
+ * 
+ * <dt>maxBinaryMessageSize</dt>
+ * <dd>set the size in bytes that a websocket may be accept as a Binary Message before closing<br>
  * 
  * <dt>inputBufferSize</dt>
  * <dd>set the size in bytes of the buffer used to read raw bytes from the network layer<br>
@@ -107,10 +108,16 @@ public abstract class WebSocketServlet extends HttpServlet
                 policy.setIdleTimeout(Long.parseLong(max));
             }
 
-            max = getInitParameter("maxMessageSize");
+            max = getInitParameter("maxTextMessageSize");
             if (max != null)
             {
-                policy.setMaxMessageSize(Long.parseLong(max));
+                policy.setMaxTextMessageSize(Integer.parseInt(max));
+            }
+
+            max = getInitParameter("maxBinaryMessageSize");
+            if (max != null)
+            {
+                policy.setMaxBinaryMessageSize(Integer.parseInt(max));
             }
 
             max = getInitParameter("inputBufferSize");
@@ -119,24 +126,7 @@ public abstract class WebSocketServlet extends HttpServlet
                 policy.setInputBufferSize(Integer.parseInt(max));
             }
 
-            WebSocketServletFactory baseFactory;
-            Iterator<WebSocketServletFactory> factories = ServiceLoader.load(WebSocketServletFactory.class).iterator();
-
-            if (factories.hasNext())
-            {
-                baseFactory = factories.next();
-            }
-            else
-            {
-                // Load the default class if ServiceLoader mechanism isn't valid in this environment. (such as OSGi)
-                ClassLoader loader = Thread.currentThread().getContextClassLoader();
-                @SuppressWarnings("unchecked")
-                Class<WebSocketServletFactory> wssf = (Class<WebSocketServletFactory>)loader
-                        .loadClass("org.eclipse.jetty.websocket.server.WebSocketServerFactory");
-                baseFactory = wssf.newInstance();
-            }
-
-            factory = baseFactory.createFactory(policy);
+            factory = WebSocketServletFactory.Loader.create(policy);
 
             configure(factory);
 

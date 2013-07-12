@@ -20,7 +20,6 @@ package org.eclipse.jetty.websocket.server;
 
 import static org.hamcrest.Matchers.*;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -37,7 +36,7 @@ import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.common.CloseInfo;
 import org.eclipse.jetty.websocket.common.OpCode;
 import org.eclipse.jetty.websocket.common.WebSocketFrame;
-import org.eclipse.jetty.websocket.common.events.EventDriver;
+import org.eclipse.jetty.websocket.common.events.AbstractEventDriver;
 import org.eclipse.jetty.websocket.server.blockhead.BlockheadClient;
 import org.eclipse.jetty.websocket.server.helper.IncomingFramesCapture;
 import org.eclipse.jetty.websocket.server.helper.RFCSocket;
@@ -75,7 +74,6 @@ public class WebSocketCloseTest
         {
             errors.add(cause);
         }
-
     }
 
     @SuppressWarnings("serial")
@@ -116,14 +114,7 @@ public class WebSocketCloseTest
         public void onWebSocketConnect(Session sess)
         {
             LOG.debug("onWebSocketConnect({})",sess);
-            try
-            {
-                sess.close();
-            }
-            catch (IOException e)
-            {
-                e.printStackTrace(System.err);
-            }
+            sess.close();
         }
     }
 
@@ -209,7 +200,7 @@ public class WebSocketCloseTest
         client.setTimeout(TimeUnit.SECONDS,1);
         try
         {
-            try (StacklessLogging scope = new StacklessLogging(EventDriver.class))
+            try (StacklessLogging scope = new StacklessLogging(AbstractEventDriver.class))
             {
                 client.connect();
                 client.sendStandardRequest();

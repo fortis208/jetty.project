@@ -27,6 +27,7 @@ import javax.servlet.AsyncListener;
 import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletContext;
 import javax.servlet.ServletResponse;
+import javax.servlet.WriteListener;
 
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.ContextHandler.Context;
@@ -62,33 +63,42 @@ public class HttpChannelState
     {
         IDLE,          // Idle request
         DISPATCHED,    // Request dispatched to filter/servlet
-        ASYNCSTARTED,  // Suspend called, but not yet returned to container
-        REDISPATCHING, // resumed while dispatched
         ASYNCWAIT,     // Suspended and parked
-        REDISPATCH,    // Has been scheduled
-        REDISPATCHED,  // Request redispatched to filter/servlet
-        COMPLETECALLED,// complete called
+        ASYNCIO,       // Has been dispatched for async IO
         COMPLETING,    // Request is completable
         COMPLETED      // Request is complete
     }
-    
-    public enum Next
+
+    public enum Action
     {
-        CONTINUE,       // Continue handling the channel        
-        WAIT,           // Wait for further events 
-        COMPLETE,       // Complete the channel
-        RECYCLE,        // Channel is completed
+        REQUEST_DISPATCH, // handle a normal request dispatch  
+        ASYNC_DISPATCH,   // handle an async request dispatch
+        ASYNC_EXPIRED,    // handle an async timeout
+        WRITE_CALLBACK,   // handle an IO write callback
+        READ_CALLBACK,    // handle an IO read callback
+        WAIT,             // Wait for further events 
+        COMPLETE          // Complete the channel
+    }
+    
+    public enum Async
+    {
+        STARTED,
+        DISPATCH,
+        COMPLETE,
+        EXPIRING,
+        EXPIRED
     }
 
+    private final boolean DEBUG=LOG.isDebugEnabled();
     private final HttpChannel<?> _channel;
     private List<AsyncListener> _lastAsyncListeners;
     private List<AsyncListener> _asyncListeners;
 
     private State _state;
+    private Async _async;
     private boolean _initial;
-    private boolean _dispatched;
-    private boolean _expired;
-    private volatile boolean _responseWrapped;
+    private boolean _asyncRead;
+    private boolean _asyncWrite;
     private long _timeoutMs=DEFAULT_TIMEOUT;
     private AsyncContextEvent _event;
 
@@ -96,6 +106,7 @@ public class HttpChannelState
     {
         _channel=channel;
         _state=State.IDLE;
+        _async=null;
         _initial=true;
     }
 
@@ -146,7 +157,7 @@ public class HttpChannelState
     {
         synchronized (this)
         {
-            return super.toString()+"@"+getStatusString();
+            return String.format("%s@%x{s=%s i=%b a=%s}",getClass().getSimpleName(),hashCode(),_state,_initial,_async);
         }
     }
 
@@ -154,20 +165,19 @@ public class HttpChannelState
     {
         synchronized (this)
         {
-            return _state+
-            (_initial?",initial":"")+
-            (_dispatched?",resumed":"")+
-            (_expired?",expired":"");
+            return String.format("s=%s i=%b a=%s",_state,_initial,_async);
         }
     }
 
     /**
      * @return Next handling of the request should proceed
      */
-    protected Next handling()
+    protected Action handling()
     {
         synchronized (this)
         {
+            if(DEBUG)
+                LOG.debug("{} handling {}",this,_state);
             switch(_state)
             {
                 case IDLE:
@@ -182,60 +192,75 @@ public class HttpChannelState
                         _asyncListeners=_lastAsyncListeners;
                         _lastAsyncListeners=null;
                     }
-                    break;
-
-                case COMPLETECALLED:
-                    _state=State.COMPLETING;
-                    return Next.COMPLETE;
+                    return Action.REQUEST_DISPATCH;
 
                 case COMPLETING:
-                    return Next.COMPLETE;
-                    
-                case ASYNCWAIT:
-                    return Next.WAIT;
-                    
-                case COMPLETED:
-                    return Next.RECYCLE;
+                    return Action.COMPLETE;
 
-                case REDISPATCH:
-                    _state=State.REDISPATCHED;
-                    break;
+                case COMPLETED:
+                    return Action.WAIT;
+
+                case ASYNCWAIT:
+                    if (_asyncRead)
+                    {
+                        _state=State.ASYNCIO;
+                        _asyncRead=false;
+                        return Action.READ_CALLBACK;
+                    }
+                    if (_asyncWrite)
+                    {
+                        _state=State.ASYNCIO;
+                        _asyncWrite=false;
+                        return Action.WRITE_CALLBACK;
+                    }
+                    
+                    if (_async!=null)
+                    {
+                        Async async=_async;
+                        switch(async)
+                        {
+                            case COMPLETE:
+                                _state=State.COMPLETING;
+                                return Action.COMPLETE;
+                            case DISPATCH:
+                                _state=State.DISPATCHED;
+                                _async=null;
+                                return Action.ASYNC_DISPATCH;
+                            case EXPIRING:
+                                break;
+                            case EXPIRED:
+                                _state=State.DISPATCHED;
+                                _async=null;
+                                return Action.ASYNC_EXPIRED;
+                            case STARTED:
+                                // TODO
+                                LOG.warn("TODO Fix this double dispatch",new IllegalStateException(this.getStatusString()));
+                                return Action.WAIT;
+                        }
+                    }
+                    
+                    return Action.WAIT;
 
                 default:
                     throw new IllegalStateException(this.getStatusString());
             }
-
-            _responseWrapped=false;
-            return Next.CONTINUE;
-
         }
     }
-
 
     public void startAsync(AsyncContextEvent event)
     {
         synchronized (this)
         {
-            switch(_state)
-            {
-                case DISPATCHED:
-                case REDISPATCHED:
-                    _dispatched=false;
-                    _expired=false;
-                    _responseWrapped=event.getSuppliedResponse()!=_channel.getResponse();
-                    _responseWrapped=false;
-                    _event=event;
-                    _state=State.ASYNCSTARTED;
-                    List<AsyncListener> listeners=_lastAsyncListeners;
-                    _lastAsyncListeners=_asyncListeners;
-                    if (listeners!=null)
-                        listeners.clear();
-                    _asyncListeners=listeners;
-                    break;
-
-                default:
-                    throw new IllegalStateException(this.getStatusString());
-            }
+            if (_state!=State.DISPATCHED || _async!=null)
+                throw new IllegalStateException(this.getStatusString());
+            
+            _async=Async.STARTED;
+            _event=event;
+            List<AsyncListener> listeners=_lastAsyncListeners;
+            _lastAsyncListeners=_asyncListeners;
+            if (listeners!=null)
+                listeners.clear();
+            _asyncListeners=listeners;
         }
 
         if (_lastAsyncListeners!=null)
@@ -270,39 +295,63 @@ public class HttpChannelState
      * @return next actions
      * be handled again (eg because of a resume that happened before unhandle was called)
      */
-    protected Next unhandle()
+    protected Action unhandle()
     {
         synchronized (this)
         {
+            if(DEBUG)
+                LOG.debug("{} unhandle {}",this,_state);
+            
             switch(_state)
             {
-                case REDISPATCHED:
                 case DISPATCHED:
-                    _state=State.COMPLETING;
-                    return Next.COMPLETE;
-
-                case IDLE:
-                    throw new IllegalStateException(this.getStatusString());
-
-                case ASYNCSTARTED:
-                    _initial=false;
-                    _state=State.ASYNCWAIT;
-                    scheduleTimeout();
-                    return Next.WAIT;
-
-                case REDISPATCHING:
-                    _initial=false;
-                    _state=State.REDISPATCHED;
-                    return Next.CONTINUE;
-
-                case COMPLETECALLED:
-                    _initial=false;
-                    _state=State.COMPLETING;
-                    return Next.COMPLETE;
-
+                case ASYNCIO:
+                    break;
                 default:
                     throw new IllegalStateException(this.getStatusString());
             }
+
+            if (_asyncRead)
+            {
+                _state=State.ASYNCIO;
+                _asyncRead=false;
+                return Action.READ_CALLBACK;
+            }
+            
+            if (_asyncWrite)
+            {
+                _asyncWrite=false;
+                _state=State.ASYNCIO;
+                return Action.WRITE_CALLBACK;
+            }
+
+            if (_async!=null)
+            {
+                _initial=false;
+                switch(_async)
+                {
+                    case COMPLETE:
+                        _state=State.COMPLETING;
+                        _async=null;
+                        return Action.COMPLETE;
+                    case DISPATCH:
+                        _state=State.DISPATCHED;
+                        _async=null;
+                        return Action.ASYNC_DISPATCH;
+                    case EXPIRED:
+                        _state=State.DISPATCHED;
+                        _async=null;
+                        return Action.ASYNC_EXPIRED;
+                    case EXPIRING:
+                    case STARTED:
+                        scheduleTimeout();
+                        _state=State.ASYNCWAIT;
+                        return Action.WAIT;
+                }
+            }
+            
+            _state=State.COMPLETING;
+            return Action.COMPLETE;
         }
     }
 
@@ -311,39 +360,26 @@ public class HttpChannelState
         boolean dispatch;
         synchronized (this)
         {
+            if (_async!=Async.STARTED && _async!=Async.EXPIRING)
+                throw new IllegalStateException("AsyncContext#dispath "+this.getStatusString());
+            _async=Async.DISPATCH;
+            _event.setDispatchTarget(context,path);
+           
             switch(_state)
             {
-                case ASYNCSTARTED:
-                    _state=State.REDISPATCHING;
-                    _event.setDispatchTarget(context,path);
-                    _dispatched=true;
-                    return;
-
-                case ASYNCWAIT:
-                    dispatch=!_expired;
-                    _state=State.REDISPATCH;
-                    _event.setDispatchTarget(context,path);
-                    _dispatched=true;
+                case DISPATCHED:
+                case ASYNCIO:
+                    dispatch=false;
                     break;
-                    
                 default:
-                    throw new IllegalStateException(this.getStatusString());
+                    dispatch=true;
+                    break;
             }
         }
 
+        cancelTimeout();
         if (dispatch)
-        {
-            cancelTimeout();
             scheduleDispatch();
-        }
-    }
-
-    public boolean isDispatched()
-    {
-        synchronized (this)
-        {
-            return _dispatched;
-        }
     }
 
     protected void expired()
@@ -352,17 +388,11 @@ public class HttpChannelState
         AsyncEvent event;
         synchronized (this)
         {
-            switch(_state)
-            {
-                case ASYNCSTARTED:
-                case ASYNCWAIT:
-                    _expired=true;
-                    event=_event;
-                    aListeners=_asyncListeners;
-                    break;
-                default:
-                    return;
-            }
+            if (_async!=Async.STARTED)
+                return;
+            _async=Async.EXPIRING;
+            event=_event;
+            aListeners=_asyncListeners;
         }
 
         if (aListeners!=null)
@@ -379,22 +409,20 @@ public class HttpChannelState
                 }
             }
         }
-
+        
+        boolean dispatch=false;
         synchronized (this)
         {
-            switch(_state)
+            if (_async==Async.EXPIRING)
             {
-                case ASYNCSTARTED:
-                case ASYNCWAIT:
-                    _state=State.REDISPATCH;
-                    break;
-                default:
-                    _expired=false;
-                    break;
+                _async=Async.EXPIRED;
+                if (_state==State.ASYNCWAIT)
+                    dispatch=true;
             }
         }
-        
-        scheduleDispatch();
+
+        if (dispatch)
+            scheduleDispatch();
     }
 
     public void complete()
@@ -403,30 +431,15 @@ public class HttpChannelState
         boolean handle;
         synchronized (this)
         {
-            switch(_state)
-            {
-                case DISPATCHED:
-                case REDISPATCHED:
-                    throw new IllegalStateException(this.getStatusString());
-
-                case IDLE:
-                case ASYNCSTARTED:
-                    _state=State.COMPLETECALLED;
-                    return;
-
-                case ASYNCWAIT:
-                    _state=State.COMPLETECALLED;
-                    handle=!_expired;
-                    break;
-
-                default:
-                    throw new IllegalStateException(this.getStatusString());
-            }
+            if (_async!=Async.STARTED && _async!=Async.EXPIRING)
+                throw new IllegalStateException(this.getStatusString());
+            _async=Async.COMPLETE;
+            handle=_state==State.ASYNCWAIT;
         }
 
+        cancelTimeout();
         if (handle)
         {
-            cancelTimeout();
             ContextHandler handler=getContextHandler();
             if (handler!=null)
                 handler.handle(_channel);
@@ -487,18 +500,18 @@ public class HttpChannelState
             switch(_state)
             {
                 case DISPATCHED:
-                case REDISPATCHED:
+                case ASYNCIO:
                     throw new IllegalStateException(getStatusString());
                 default:
-                    _state=State.IDLE;
+                    break;
             }
+            _state=State.IDLE;
+            _async=null;
             _initial = true;
-            _dispatched=false;
-            _expired=false;
-            _responseWrapped=false;
             cancelTimeout();
             _timeoutMs=DEFAULT_TIMEOUT;
             _event=null;
+            _asyncWrite=false;
         }
     }
 
@@ -525,10 +538,10 @@ public class HttpChannelState
     {
         synchronized (this)
         {
-            return _expired;
+            return _async==Async.EXPIRED;
         }
     }
-    
+
     public boolean isInitial()
     {
         synchronized(this)
@@ -541,17 +554,7 @@ public class HttpChannelState
     {
         synchronized(this)
         {
-            switch(_state)
-            {
-                case ASYNCSTARTED:
-                case REDISPATCHING:
-                case COMPLETECALLED:
-                case ASYNCWAIT:
-                    return true;
-
-                default:
-                    return false;
-            }
+            return _state==State.ASYNCWAIT || _state==State.DISPATCHED && _async==Async.STARTED;
         }
     }
 
@@ -563,19 +566,19 @@ public class HttpChannelState
         }
     }
 
-    public boolean isAsyncStarted()
+    boolean isCompleted()
     {
         synchronized (this)
         {
-            switch(_state)
-            {
-                case ASYNCSTARTED:
-                case ASYNCWAIT:
-                    return true;
+            return _state == State.COMPLETED;
+        }
+    }
 
-                default:
-                    return false;
-            }
+    public boolean isAsyncStarted()
+    {
+        synchronized (this)
+        {    
+            return _async==Async.STARTED || _async==Async.EXPIRING;
         }
     }
 
@@ -583,19 +586,7 @@ public class HttpChannelState
     {
         synchronized (this)
         {
-            switch(_state)
-            {
-                case ASYNCSTARTED:
-                case REDISPATCHING:
-                case ASYNCWAIT:
-                case REDISPATCHED:
-                case REDISPATCH:
-                case COMPLETECALLED:
-                    return true;
-
-                default:
-                    return false;
-            }
+            return !_initial || _async!=null;
         }
     }
 
@@ -623,7 +614,7 @@ public class HttpChannelState
 
     public ServletResponse getServletResponse()
     {
-        if (_responseWrapped && _event!=null && _event.getSuppliedResponse()!=null)
+        if (_event!=null && _event.getSuppliedResponse()!=null)
             return _event.getSuppliedResponse();
         return _channel.getResponse();
     }
@@ -643,6 +634,34 @@ public class HttpChannelState
         _channel.getRequest().setAttribute(name,attribute);
     }
 
+    public void onReadPossible()
+    {
+        boolean handle;
+
+        synchronized (this)
+        {
+            _asyncRead=true;
+            handle=_state==State.ASYNCWAIT;
+        }
+
+        if (handle)
+            _channel.execute(_channel);
+    }
+    
+    public void onWritePossible()
+    {
+        boolean handle;
+
+        synchronized (this)
+        {
+            _asyncWrite=true;
+            handle=_state==State.ASYNCWAIT;
+        }
+
+        if (handle)
+            _channel.execute(_channel);
+    }
+    
     public class AsyncTimeout implements Runnable
     {
         @Override

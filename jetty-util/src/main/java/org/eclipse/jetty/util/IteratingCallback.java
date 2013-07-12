@@ -23,32 +23,28 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /* ------------------------------------------------------------ */
 /** Iterating Callback.
- * <p>This specialised callback is used when breaking up an
+ * <p>This specialized callback is used when breaking up an
  * asynchronous task into smaller asynchronous tasks.  A typical pattern
  * is that a successful callback is used to schedule the next sub task, but 
  * if that task completes quickly and uses the calling thread to callback
  * the success notification, this can result in a growing stack depth.
  * </p>
- * <p>To avoid this issue, this callback uses an Atomicboolean to note 
+ * <p>To avoid this issue, this callback uses an AtomicBoolean to note 
  * if the success callback has been called during the processing of a 
  * sub task, and if so then the processing iterates rather than recurses.
  * </p>
  * <p>This callback is passed to the asynchronous handling of each sub
  * task and a call the {@link #succeeded()} on this call back represents
  * completion of the subtask.  Only once all the subtasks are completed is 
- * the {@link Callback#succeeded()} method called on the {@link Callback} instance
- * passed the the {@link #IteratingCallback(Callback)} constructor.</p>
+ * the {#completed()} method called.</p>
  *  
  */
 public abstract class IteratingCallback implements Callback
 {
-    final AtomicBoolean _iterating = new AtomicBoolean();
-    final Callback _callback;
+    private final AtomicBoolean _iterating = new AtomicBoolean();
     
-    
-    public IteratingCallback(Callback callback)
+    public IteratingCallback()
     {
-        _callback=callback;
     }
     
     /* ------------------------------------------------------------ */
@@ -62,6 +58,8 @@ public abstract class IteratingCallback implements Callback
      * @throws Exception
      */
     abstract protected boolean process() throws Exception;
+    
+    abstract protected void completed();
     
     /* ------------------------------------------------------------ */
     /** This method is called initially to start processing and 
@@ -78,7 +76,7 @@ public abstract class IteratingCallback implements Callback
                 // process and test if we are complete
                 if (process())
                 {
-                    _callback.succeeded();
+                    completed();
                     return;
                 }
             }
@@ -86,26 +84,19 @@ public abstract class IteratingCallback implements Callback
         catch(Exception e)
         {
             _iterating.set(false);
-            _callback.failed(e);
+            failed(e);
         }
         finally
         {
             _iterating.set(false);
         }
     }
-    
-    
+
+    /* ------------------------------------------------------------ */
     @Override
     public void succeeded()
     {
         if (!_iterating.compareAndSet(true,false))
             iterate();
     }
-
-    @Override
-    public void failed(Throwable x)
-    {
-        _callback.failed(x);
-    }
-
 }

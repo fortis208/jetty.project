@@ -96,7 +96,7 @@ public abstract class AbstractWebSocketConnection extends AbstractConnection imp
 
             // Abnormal Close
             reason = CloseStatus.trimMaxReasonLength(reason);
-            session.incomingError(new WebSocketException(x)); // TODO: JSR-356 change to Throwable
+            session.notifyError(x);
             session.notifyClose(StatusCode.NO_CLOSE,reason);
 
             disconnect(); // disconnect endpoint & connection
@@ -348,6 +348,7 @@ public abstract class AbstractWebSocketConnection extends AbstractConnection imp
         write(buffer);
     }
 
+    @Override
     public ByteBufferPool getBufferPool()
     {
         return bufferPool;
@@ -368,6 +369,12 @@ public abstract class AbstractWebSocketConnection extends AbstractConnection imp
     public Generator getGenerator()
     {
         return generator;
+    }
+
+    @Override
+    public long getIdleTimeout()
+    {
+        return getEndPoint().getIdleTimeout();
     }
 
     @Override
@@ -518,7 +525,7 @@ public abstract class AbstractWebSocketConnection extends AbstractConnection imp
         }
 
         // Initiate close - politely send close frame.
-        session.incomingError(new WebSocketTimeoutException("Timeout on Read"));
+        session.notifyError(new WebSocketTimeoutException("Timeout on Read"));
         close(StatusCode.SHUTDOWN,"Idle Timeout");
 
         return false;
@@ -545,7 +552,7 @@ public abstract class AbstractWebSocketConnection extends AbstractConnection imp
         EndPoint endPoint = getEndPoint();
         try
         {
-            while (true)
+            while (true) // TODO: should this honor the LogicalConnection.suspend() ?
             {
                 int filled = endPoint.fill(buffer);
                 if (filled == 0)
@@ -565,6 +572,7 @@ public abstract class AbstractWebSocketConnection extends AbstractConnection imp
                         LOG.debug("Filled {} bytes - {}",filled,BufferUtil.toDetailString(buffer));
                     }
                     parser.parse(buffer);
+                    // TODO: has the end user application already consumed what it was given?
                 }
             }
         }

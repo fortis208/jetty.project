@@ -18,7 +18,6 @@
 
 package org.eclipse.jetty.spdy.server.http;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,7 +28,6 @@ import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.Cookie;
@@ -38,6 +36,7 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.eclipse.jetty.continuation.Continuation;
 import org.eclipse.jetty.continuation.ContinuationSupport;
+import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.server.HttpChannel;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
@@ -52,11 +51,11 @@ import org.eclipse.jetty.spdy.api.SynInfo;
 import org.eclipse.jetty.util.Fields;
 import org.eclipse.jetty.util.log.StdErrLog;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThat;
@@ -100,7 +99,9 @@ public class ServerHTTPSPDYTest extends AbstractHTTPSPDYTest
             {
                 assertTrue(replyInfo.isClose());
                 Fields replyHeaders = replyInfo.getHeaders();
-                assertTrue(replyHeaders.get(HTTPSPDYHeader.STATUS.name(version)).value().contains("200"));
+                assertThat(replyHeaders.get(HTTPSPDYHeader.STATUS.name(version)).value().contains("200"), is(true));
+                assertThat(replyHeaders.get(HttpHeader.SERVER.asString()), is(notNullValue()));
+                assertThat(replyHeaders.get(HttpHeader.X_POWERED_BY.asString()), is(notNullValue()));
                 replyLatch.countDown();
             }
         });
@@ -989,32 +990,12 @@ public class ServerHTTPSPDYTest extends AbstractHTTPSPDYTest
         assertTrue(replyLatch.await(5, TimeUnit.SECONDS));
         assertTrue(dataLatch.await(5, TimeUnit.SECONDS));
     }
-
-    @Ignore("The correspondent functionality in HttpOutput is not yet implemented")
-    @Test
-    public void testGETWithMediumContentAsInputStreamByPassed() throws Exception
-    {
-        byte[] data = new byte[2048];
-        testGETWithContentByPassed(new ByteArrayInputStream(data), data.length);
-    }
-
-    @Ignore("The correspondent functionality in HttpOutput is not yet implemented")
-    @Test
-    public void testGETWithBigContentAsInputStreamByPassed() throws Exception
-    {
-        byte[] data = new byte[128 * 1024];
-        testGETWithContentByPassed(new ByteArrayInputStream(data), data.length);
-    }
-
+    
     @Test
     public void testGETWithMediumContentAsBufferByPassed() throws Exception
     {
-        byte[] data = new byte[2048];
-        testGETWithContentByPassed(ByteBuffer.wrap(data), data.length);
-    }
-
-    private void testGETWithContentByPassed(final Object content, final int length) throws Exception
-    {
+        final byte[] data = new byte[2048];
+        
         final CountDownLatch handlerLatch = new CountDownLatch(1);
         Session session = startClient(version, startHTTPServer(version, new AbstractHandler()
         {
@@ -1023,10 +1004,7 @@ public class ServerHTTPSPDYTest extends AbstractHTTPSPDYTest
                     throws IOException, ServletException
             {
                 request.setHandled(true);
-                // We use this trick that's present in Jetty code: if we add a request attribute
-                // called "org.eclipse.jetty.server.sendContent", then it will trigger the
-                // content bypass that we want to test
-                request.setAttribute("org.eclipse.jetty.server.sendContent", content);
+                request.getResponse().getHttpOutput().sendContent(ByteBuffer.wrap(data));
                 handlerLatch.countDown();
             }
         }), null);
@@ -1055,7 +1033,7 @@ public class ServerHTTPSPDYTest extends AbstractHTTPSPDYTest
                 contentLength.addAndGet(dataInfo.asBytes(true).length);
                 if (dataInfo.isClose())
                 {
-                    assertEquals(length, contentLength.get());
+                    Assert.assertEquals(data.length, contentLength.get());
                     dataLatch.countDown();
                 }
             }

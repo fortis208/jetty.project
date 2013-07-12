@@ -47,8 +47,11 @@ import org.eclipse.jetty.websocket.api.extensions.ExtensionConfig;
 import org.eclipse.jetty.websocket.api.extensions.ExtensionFactory;
 import org.eclipse.jetty.websocket.client.io.ConnectPromise;
 import org.eclipse.jetty.websocket.client.io.ConnectionManager;
+import org.eclipse.jetty.websocket.client.io.UpgradeListener;
 import org.eclipse.jetty.websocket.client.masks.Masker;
 import org.eclipse.jetty.websocket.client.masks.RandomMasker;
+import org.eclipse.jetty.websocket.common.SessionFactory;
+import org.eclipse.jetty.websocket.common.WebSocketSessionFactory;
 import org.eclipse.jetty.websocket.common.events.EventDriver;
 import org.eclipse.jetty.websocket.common.events.EventDriverFactory;
 import org.eclipse.jetty.websocket.common.extensions.WebSocketExtensionFactory;
@@ -63,7 +66,8 @@ public class WebSocketClient extends ContainerLifeCycle
     private final WebSocketPolicy policy;
     private final SslContextFactory sslContextFactory;
     private final WebSocketExtensionFactory extensionRegistry;
-    private final EventDriverFactory eventDriverFactory;
+    private EventDriverFactory eventDriverFactory;
+    private SessionFactory sessionFactory;
     private ByteBufferPool bufferPool;
     private Executor executor;
     private Scheduler scheduler;
@@ -85,6 +89,7 @@ public class WebSocketClient extends ContainerLifeCycle
         this.extensionRegistry = new WebSocketExtensionFactory(policy,bufferPool);
         this.masker = new RandomMasker();
         this.eventDriverFactory = new EventDriverFactory(policy);
+        this.sessionFactory = new WebSocketSessionFactory();
     }
 
     public Future<Session> connect(Object websocket, URI toUri) throws IOException
@@ -97,6 +102,11 @@ public class WebSocketClient extends ContainerLifeCycle
     }
 
     public Future<Session> connect(Object websocket, URI toUri, ClientUpgradeRequest request) throws IOException
+    {
+        return connect(websocket,toUri,request,null);
+    }
+
+    public Future<Session> connect(Object websocket, URI toUri, ClientUpgradeRequest request, UpgradeListener upgradeListener) throws IOException
     {
         if (!isStarted())
         {
@@ -133,16 +143,38 @@ public class WebSocketClient extends ContainerLifeCycle
         }
 
         // Validate websocket URI
-        LOG.debug("connect websocket:{} to:{}",websocket,toUri);
+        LOG.debug("connect websocket {} to {}",websocket,toUri);
 
         // Grab Connection Manager
         ConnectionManager manager = getConnectionManager();
 
         // Setup Driver for user provided websocket
-        EventDriver driver = eventDriverFactory.wrap(websocket);
+        EventDriver driver = null;
+        if (websocket instanceof EventDriver)
+        {
+            // Use the EventDriver as-is
+            driver = (EventDriver)websocket;
+        }
+        else
+        {
+            // Wrap websocket with appropriate EventDriver
+            driver = eventDriverFactory.wrap(websocket);
+        }
+
+        if (driver == null)
+        {
+            throw new IllegalStateException("Unable to identify as websocket object: " + websocket.getClass().getName());
+        }
 
         // Create the appropriate (physical vs virtual) connection task
         ConnectPromise promise = manager.connect(this,driver,request);
+
+        if (upgradeListener != null)
+        {
+            promise.setUpgradeListener(upgradeListener);
+        }
+
+        LOG.debug("Connect Promise: {}",promise);
 
         // Execute the connection on the executor thread
         executor.execute(promise);
@@ -211,6 +243,16 @@ public class WebSocketClient extends ContainerLifeCycle
         LOG.info("Stopped {}",this);
     }
 
+    /**
+     * Return the number of milliseconds for a timeout of an attempted write operation.
+     * 
+     * @return number of milliseconds for timeout of an attempted write operation
+     */
+    public long getAsyncWriteTimeout()
+    {
+        return this.policy.getAsyncWriteTimeout();
+    }
+
     public SocketAddress getBindAddress()
     {
         return bindAddress;
@@ -236,6 +278,11 @@ public class WebSocketClient extends ContainerLifeCycle
         return cookieStore;
     }
 
+    public EventDriverFactory getEventDriverFactory()
+    {
+        return eventDriverFactory;
+    }
+
     public Executor getExecutor()
     {
         return executor;
@@ -252,6 +299,26 @@ public class WebSocketClient extends ContainerLifeCycle
     }
 
     /**
+     * Get the maximum size for buffering of a binary message.
+     * 
+     * @return the maximum size of a binary message buffer.
+     */
+    public int getMaxBinaryMessageBufferSize()
+    {
+        return this.policy.getMaxBinaryMessageBufferSize();
+    }
+
+    /**
+     * Get the maximum size for a binary message.
+     * 
+     * @return the maximum size of a binary message.
+     */
+    public long getMaxBinaryMessageSize()
+    {
+        return this.policy.getMaxBinaryMessageSize();
+    }
+
+    /**
      * Get the max idle timeout for new connections.
      * 
      * @return the max idle timeout in milliseconds for new connections.
@@ -259,6 +326,26 @@ public class WebSocketClient extends ContainerLifeCycle
     public long getMaxIdleTimeout()
     {
         return this.policy.getIdleTimeout();
+    }
+
+    /**
+     * Get the maximum size for buffering of a text message.
+     * 
+     * @return the maximum size of a text message buffer.
+     */
+    public int getMaxTextMessageBufferSize()
+    {
+        return this.policy.getMaxTextMessageBufferSize();
+    }
+
+    /**
+     * Get the maximum size for a text message.
+     * 
+     * @return the maximum size of a text message.
+     */
+    public long getMaxTextMessageSize()
+    {
+        return this.policy.getMaxTextMessageSize();
     }
 
     public WebSocketPolicy getPolicy()
@@ -269,6 +356,11 @@ public class WebSocketClient extends ContainerLifeCycle
     public Scheduler getScheduler()
     {
         return scheduler;
+    }
+
+    public SessionFactory getSessionFactory()
+    {
+        return sessionFactory;
     }
 
     /**
@@ -310,6 +402,11 @@ public class WebSocketClient extends ContainerLifeCycle
         return new ConnectionManager(this);
     }
 
+    public void setAsyncWriteTimeout(long ms)
+    {
+        this.policy.setAsyncWriteTimeout(ms);
+    }
+
     public void setBindAdddress(SocketAddress bindAddress)
     {
         this.bindAddress = bindAddress;
@@ -340,6 +437,11 @@ public class WebSocketClient extends ContainerLifeCycle
         this.cookieStore = cookieStore;
     }
 
+    public void setEventDriverFactory(EventDriverFactory factory)
+    {
+        this.eventDriverFactory = factory;
+    }
+
     public void setExecutor(Executor executor)
     {
         this.executor = executor;
@@ -348,6 +450,11 @@ public class WebSocketClient extends ContainerLifeCycle
     public void setMasker(Masker masker)
     {
         this.masker = masker;
+    }
+
+    public void setMaxBinaryMessageBufferSize(int max)
+    {
+        this.policy.setMaxBinaryMessageBufferSize(max);
     }
 
     /**
@@ -361,5 +468,15 @@ public class WebSocketClient extends ContainerLifeCycle
     public void setMaxIdleTimeout(long milliseconds)
     {
         this.policy.setIdleTimeout(milliseconds);
+    }
+
+    public void setMaxTextMessageBufferSize(int max)
+    {
+        this.policy.setMaxTextMessageBufferSize(max);
+    }
+
+    public void setSessionFactory(SessionFactory sessionFactory)
+    {
+        this.sessionFactory = sessionFactory;
     }
 }

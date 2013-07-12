@@ -19,7 +19,6 @@
 package org.eclipse.jetty.spdy.client;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
@@ -53,6 +52,22 @@ import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 import org.eclipse.jetty.util.thread.Scheduler;
 
+/**
+ * A {@link SPDYClient} allows applications to connect to one or more SPDY servers,
+ * obtaining {@link Session} objects that can be used to send/receive SPDY frames.
+ * <p />
+ * {@link SPDYClient} instances are created through a {@link Factory}:
+ * <pre>
+ * SPDYClient.Factory factory = new SPDYClient.Factory();
+ * SPDYClient client = factory.newSPDYClient(SPDY.V3);
+ * </pre>
+ * and then used to connect to the server:
+ * <pre>
+ * FuturePromise&lt;Session&gt; promise = new FuturePromise&lt;&gt;();
+ * client.connect("server.com", null, promise);
+ * Session session = promise.get();
+ * </pre>
+ */
 public class SPDYClient
 {
     private final SPDYClientConnectionFactory connectionFactory = new SPDYClientConnectionFactory();
@@ -88,14 +103,35 @@ public class SPDYClient
         this.bindAddress = bindAddress;
     }
 
-    @Deprecated
-    public Future<Session> connect(InetSocketAddress address, SessionFrameListener listener) throws IOException
+    /**
+     * Equivalent to:
+     * <pre>
+     * Future&lt;Session&gt; promise = new FuturePromise&lt;&gt;();
+     * connect(address, listener, promise);
+     * </pre>
+     *
+     * @param address the address to connect to
+     * @param listener the session listener that will be notified of session events
+     * @return a {@link Future} that provides a {@link Session} when connected
+     */
+    public Future<Session> connect(SocketAddress address, SessionFrameListener listener)
     {
         FuturePromise<Session> promise = new FuturePromise<>();
         connect(address, listener, promise);
         return promise;
     }
 
+    /**
+     * Connects to the given {@code address}, binding the given {@code listener} to session events,
+     * and notified the given {@code promise} of the connect result.
+     * <p />
+     * If the connect operation is successful, the {@code promise} will be invoked with the {@link Session}
+     * object that applications can use to perform SPDY requests.
+     *
+     * @param address the address to connect to
+     * @param listener the session listener that will be notified of session events
+     * @param promise the promise notified of connection success/failure
+     */
     public void connect(SocketAddress address, SessionFrameListener listener, Promise<Session> promise)
     {
         if (!factory.isStarted())
@@ -109,7 +145,7 @@ public class SPDYClient
             channel.socket().setTcpNoDelay(true);
             channel.configureBlocking(false);
 
-            SessionPromise result = new SessionPromise(channel, this, listener);
+            SessionPromise result = new SessionPromise(promise, channel, this, listener);
 
             channel.connect(address);
             factory.selector.connect(channel, result);
@@ -354,14 +390,31 @@ public class SPDYClient
     static class SessionPromise extends FuturePromise<Session>
     {
         private final SocketChannel channel;
+        private final Promise wrappedPromise;
         final SPDYClient client;
         final SessionFrameListener listener;
 
-        private SessionPromise(SocketChannel channel, SPDYClient client, SessionFrameListener listener)
+        private SessionPromise(Promise<Session> promise, SocketChannel channel, SPDYClient client,
+                               SessionFrameListener listener)
         {
             this.channel = channel;
             this.client = client;
             this.listener = listener;
+            this.wrappedPromise = promise;
+        }
+
+        @Override
+        public void succeeded(Session result)
+        {
+            wrappedPromise.succeeded(result);
+            super.succeeded(result);
+        }
+
+        @Override
+        public void failed(Throwable cause)
+        {
+            wrappedPromise.failed(cause);
+            super.failed(cause);
         }
 
         @Override

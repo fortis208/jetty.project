@@ -60,7 +60,6 @@ import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.log.StdErrLog;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.hamcrest.CoreMatchers.is;
@@ -338,7 +337,6 @@ public class ReferrerPushStrategyTest extends AbstractHTTPSPDYTest
     }
 
     @Test
-    @Ignore
     public void testPushResourceAreSentNonInterleaved() throws Exception
     {
         final CountDownLatch allExpectedPushesReceivedLatch = new CountDownLatch(4);
@@ -461,6 +459,7 @@ public class ReferrerPushStrategyTest extends AbstractHTTPSPDYTest
     private void sendRequest(Session session, Fields requestHeaders, final CountDownLatch pushSynHeadersValid,
                              final CountDownLatch pushDataLatch, final boolean resetPush) throws InterruptedException
     {
+        LOG.info("sendRequest. headers={},resetPush={}", requestHeaders, resetPush);
         final CountDownLatch dataReceivedLatch = new CountDownLatch(1);
         session.syn(new SynInfo(requestHeaders, true), new StreamFrameListener.Adapter()
         {

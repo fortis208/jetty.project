@@ -49,7 +49,6 @@ import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.IO;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
-import org.eclipse.jetty.websocket.api.WebSocketException;
 import org.eclipse.jetty.websocket.api.WebSocketPolicy;
 import org.eclipse.jetty.websocket.api.WriteCallback;
 import org.eclipse.jetty.websocket.api.extensions.ExtensionConfig;
@@ -204,7 +203,7 @@ public class BlockheadServer
         }
 
         @Override
-        public void incomingError(WebSocketException e)
+        public void incomingError(Throwable e)
         {
             incomingFrames.incomingError(e);
         }
@@ -511,7 +510,7 @@ public class BlockheadServer
             resp.append("Connection: upgrade\r\n");
             resp.append("Sec-WebSocket-Accept: ");
             resp.append(AcceptHash.hashKey(key)).append("\r\n");
-            if (!extensionStack.hasNegotiatedExtensions())
+            if (extensionStack.hasNegotiatedExtensions())
             {
                 // Respond to used extensions
                 resp.append("Sec-WebSocket-Extensions: ");

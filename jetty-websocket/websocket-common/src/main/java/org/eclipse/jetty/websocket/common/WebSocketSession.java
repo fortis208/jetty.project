@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.jetty.io.ByteBufferPool;
 import org.eclipse.jetty.util.MultiMap;
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.UrlEncoded;
@@ -59,7 +60,6 @@ public class WebSocketSession extends ContainerLifeCycle implements Session, Inc
     private final EventDriver websocket;
     private final LogicalConnection connection;
     private ExtensionFactory extensionFactory;
-    private long maximumMessageSize;
     private String protocolVersion;
     private Map<String, String[]> parameterMap = new HashMap<>();
     private WebSocketRemoteEndpoint remote;
@@ -102,7 +102,7 @@ public class WebSocketSession extends ContainerLifeCycle implements Session, Inc
     }
 
     @Override
-    public void close() throws IOException
+    public void close()
     {
         this.close(StatusCode.NORMAL,null);
     }
@@ -130,6 +130,12 @@ public class WebSocketSession extends ContainerLifeCycle implements Session, Inc
 
         // notify of harsh disconnect
         notifyClose(StatusCode.NO_CLOSE,"Harsh disconnect");
+    }
+
+    public void dispatch(Runnable runnable)
+    {
+        // TODO Auto-generated method stub
+        runnable.run();
     }
 
     @Override
@@ -187,6 +193,11 @@ public class WebSocketSession extends ContainerLifeCycle implements Session, Inc
         return true;
     }
 
+    public ByteBufferPool getBufferPool()
+    {
+        return this.connection.getBufferPool();
+    }
+
     public LogicalConnection getConnection()
     {
         return connection;
@@ -216,12 +227,6 @@ public class WebSocketSession extends ContainerLifeCycle implements Session, Inc
     public InetSocketAddress getLocalAddress()
     {
         return connection.getLocalAddress();
-    }
-
-    @Override
-    public long getMaximumMessageSize()
-    {
-        return maximumMessageSize;
     }
 
     @ManagedAttribute(readonly = true)
@@ -291,12 +296,12 @@ public class WebSocketSession extends ContainerLifeCycle implements Session, Inc
      * Incoming Errors from Parser
      */
     @Override
-    public void incomingError(WebSocketException e)
+    public void incomingError(Throwable t)
     {
         if (connection.getIOState().isInputAvailable())
         {
             // Forward Errors to User WebSocket Object
-            websocket.incomingError(e);
+            websocket.incomingError(t);
         }
     }
 
@@ -339,6 +344,11 @@ public class WebSocketSession extends ContainerLifeCycle implements Session, Inc
     public void notifyClose(int statusCode, String reason)
     {
         websocket.onClose(new CloseInfo(statusCode,reason));
+    }
+
+    public void notifyError(Throwable cause)
+    {
+        incomingError(cause);
     }
 
     @Override
@@ -402,12 +412,6 @@ public class WebSocketSession extends ContainerLifeCycle implements Session, Inc
     public void setIdleTimeout(long ms)
     {
         connection.setMaxIdleTimeout(ms);
-    }
-
-    @Override
-    public void setMaximumMessageSize(long length)
-    {
-        this.maximumMessageSize = length;
     }
 
     public void setOutgoingHandler(OutgoingFrames outgoing)

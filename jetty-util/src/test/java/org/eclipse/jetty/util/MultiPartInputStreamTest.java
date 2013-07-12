@@ -570,7 +570,7 @@ public class MultiPartInputStreamTest
         mpis.setDeleteOnExit(true);
         Collection<Part> parts = mpis.getParts();
         assertThat(parts.size(), is(1));
-        assertThat(((MultiPartInputStreamParser.MultiPart)parts.iterator().next()).getContentDispositionFilename(), is("Taken on Aug 22 \\ 2012.jpg"));
+        assertThat(((MultiPartInputStreamParser.MultiPart)parts.iterator().next()).getSubmittedFileName(), is("Taken on Aug 22 \\ 2012.jpg"));
     }
     
     @Test
@@ -592,7 +592,7 @@ public class MultiPartInputStreamTest
         mpis.setDeleteOnExit(true);
         Collection<Part> parts = mpis.getParts();
         assertThat(parts.size(), is(1));
-        assertThat(((MultiPartInputStreamParser.MultiPart)parts.iterator().next()).getContentDispositionFilename(), is("c:\\this\\really\\is\\some\\path\\to\\a\\file.txt"));
+        assertThat(((MultiPartInputStreamParser.MultiPart)parts.iterator().next()).getSubmittedFileName(), is("c:\\this\\really\\is\\some\\path\\to\\a\\file.txt"));
     }
 
     @Test
@@ -613,7 +613,7 @@ public class MultiPartInputStreamTest
         mpis.setDeleteOnExit(true);
         Collection<Part> parts = mpis.getParts();
         assertThat(parts.size(), is(1));
-        assertThat(((MultiPartInputStreamParser.MultiPart)parts.iterator().next()).getContentDispositionFilename(), is("c:\\this\\really\\is\\some\\path\\to\\a\\file.txt"));
+        assertThat(((MultiPartInputStreamParser.MultiPart)parts.iterator().next()).getSubmittedFileName(), is("c:\\this\\really\\is\\some\\path\\to\\a\\file.txt"));
     }
     
     public void testMulti ()
@@ -664,7 +664,7 @@ public class MultiPartInputStreamTest
         assertFalse(f2.exists()); //2nd written file was explicitly deleted
 
         MultiPart stuff = (MultiPart)mpis.getPart("stuff");
-        assertThat(stuff.getContentDispositionFilename(), is(filename));
+        assertThat(stuff.getSubmittedFileName(), is(filename));
         assertThat(stuff.getContentType(),is("text/plain"));
         assertThat(stuff.getHeader("Content-Type"),is("text/plain"));
         assertThat(stuff.getHeaders("content-type").size(),is(1));
@@ -724,6 +724,98 @@ public class MultiPartInputStreamTest
         assertEquals(5, p.getSize());
     }
 
+    @Test
+    public void testBase64EncodedContent () throws Exception
+    {
+        String contentWithEncodedPart =
+                "--AaB03x\r\n"+
+                        "Content-disposition: form-data; name=\"other\"\r\n"+
+                        "Content-Type: text/plain\r\n"+
+                        "\r\n"+
+                        "other" + "\r\n"+
+                        "--AaB03x\r\n"+
+                        "Content-disposition: form-data; name=\"stuff\"; filename=\"stuff.txt\"\r\n"+
+                        "Content-Transfer-Encoding: base64\r\n"+
+                        "Content-Type: application/octet-stream\r\n"+
+                        "\r\n"+
+                        B64Code.encode("hello jetty") + "\r\n"+                  
+                        "--AaB03x\r\n"+
+                        "Content-disposition: form-data; name=\"final\"\r\n"+
+                        "Content-Type: text/plain\r\n"+
+                        "\r\n"+
+                        "the end" + "\r\n"+
+                        "--AaB03x--\r\n";
+
+        MultipartConfigElement config = new MultipartConfigElement(_dirname, 1024, 3072, 50);
+        MultiPartInputStreamParser mpis = new MultiPartInputStreamParser(new ByteArrayInputStream(contentWithEncodedPart.getBytes()),
+                                                                         _contentType,
+                                                                         config,
+                                                                         _tmpDir);
+        mpis.setDeleteOnExit(true);
+        Collection<Part> parts = mpis.getParts();
+        assertEquals(3, parts.size());
+
+        Part p1 = mpis.getPart("other");
+        assertNotNull(p1);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        IO.copy(p1.getInputStream(), baos);
+        assertEquals("other", baos.toString("US-ASCII"));
+
+        Part p2 = mpis.getPart("stuff");
+        assertNotNull(p2);
+        baos = new ByteArrayOutputStream();
+        IO.copy(p2.getInputStream(), baos);
+        assertEquals("hello jetty", baos.toString("US-ASCII"));
+        
+        Part p3 = mpis.getPart("final");
+        assertNotNull(p3);
+        baos = new ByteArrayOutputStream();
+        IO.copy(p3.getInputStream(), baos);
+        assertEquals("the end", baos.toString("US-ASCII"));
+    }
+    
+    @Test
+    public void testQuotedPrintableEncoding () throws Exception
+    {
+        String contentWithEncodedPart = 
+                "--AaB03x\r\n"+
+                        "Content-disposition: form-data; name=\"other\"\r\n"+
+                        "Content-Type: text/plain\r\n"+
+                        "\r\n"+
+                        "other" + "\r\n"+
+                        "--AaB03x\r\n"+
+                        "Content-disposition: form-data; name=\"stuff\"; filename=\"stuff.txt\"\r\n"+
+                        "Content-Transfer-Encoding: quoted-printable\r\n"+
+                        "Content-Type: text/plain\r\n"+
+                        "\r\n"+
+                        "truth=3Dbeauty" + "\r\n"+
+                        "--AaB03x--\r\n";  
+        MultipartConfigElement config = new MultipartConfigElement(_dirname, 1024, 3072, 50);
+        MultiPartInputStreamParser mpis = new MultiPartInputStreamParser(new ByteArrayInputStream(contentWithEncodedPart.getBytes()),
+                                                                         _contentType,
+                                                                         config,
+                                                                         _tmpDir);
+        mpis.setDeleteOnExit(true);
+        Collection<Part> parts = mpis.getParts();
+        assertEquals(2, parts.size());
+
+        Part p1 = mpis.getPart("other");
+        assertNotNull(p1);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        IO.copy(p1.getInputStream(), baos);
+        assertEquals("other", baos.toString("US-ASCII"));
+
+        Part p2 = mpis.getPart("stuff");
+        assertNotNull(p2);
+        baos = new ByteArrayOutputStream();
+        IO.copy(p2.getInputStream(), baos);
+        assertEquals("truth=beauty", baos.toString("US-ASCII"));
+    }
+
+
+
+
+    
     private String createMultipartRequestString(String filename)
     {
         int length = filename.length();

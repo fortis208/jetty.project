@@ -40,6 +40,7 @@ import org.eclipse.jetty.websocket.api.extensions.ExtensionConfig;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.ClientUpgradeResponse;
 import org.eclipse.jetty.websocket.common.AcceptHash;
+import org.eclipse.jetty.websocket.common.SessionFactory;
 import org.eclipse.jetty.websocket.common.WebSocketSession;
 import org.eclipse.jetty.websocket.common.events.EventDriver;
 import org.eclipse.jetty.websocket.common.extensions.ExtensionStack;
@@ -60,6 +61,13 @@ public class UpgradeConnection extends AbstractConnection
         {
             URI uri = connectPromise.getRequest().getRequestURI();
             request.setRequestURI(uri);
+
+            UpgradeListener handshakeListener = connectPromise.getUpgradeListener();
+            if (handshakeListener != null)
+            {
+                handshakeListener.onHandshakeRequest(request);
+            }
+
             String rawRequest = request.generate();
 
             ByteBuffer buf = BufferUtil.toBuffer(rawRequest,StringUtil.__UTF8_CHARSET);
@@ -113,6 +121,12 @@ public class UpgradeConnection extends AbstractConnection
     private void notifyConnect(ClientUpgradeResponse response)
     {
         connectPromise.setResponse(response);
+
+        UpgradeListener handshakeListener = connectPromise.getUpgradeListener();
+        if (handshakeListener != null)
+        {
+            handshakeListener.onHandshakeResponse(response);
+        }
     }
 
     @Override
@@ -215,7 +229,8 @@ public class UpgradeConnection extends AbstractConnection
         EventDriver websocket = connectPromise.getDriver();
         WebSocketPolicy policy = connectPromise.getClient().getPolicy();
 
-        WebSocketSession session = new WebSocketSession(request.getRequestURI(),websocket,connection);
+        SessionFactory sessionFactory = connectPromise.getClient().getSessionFactory();
+        WebSocketSession session = sessionFactory.createSession(request.getRequestURI(),websocket,connection);
         session.setPolicy(policy);
         session.setUpgradeResponse(response);
 

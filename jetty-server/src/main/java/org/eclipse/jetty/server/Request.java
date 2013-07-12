@@ -57,6 +57,7 @@ import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
+import javax.servlet.http.HttpUpgradeHandler;
 import javax.servlet.http.Part;
 
 import org.eclipse.jetty.http.HttpCookie;
@@ -203,7 +204,6 @@ public class Request implements HttpServletRequest
     private HttpSession _session;
     private SessionManager _sessionManager;
     private long _timeStamp;
-    private long _dispatchTime;
     private HttpURI _uri;
     private MultiPartInputStreamParser _multiPartInputStream; //if the request is a multi-part mime
     private AsyncContextState _async;
@@ -495,6 +495,16 @@ public class Request implements HttpServletRequest
     public int getContentLength()
     {
         return (int)_fields.getLongField(HttpHeader.CONTENT_LENGTH.toString());
+    }
+    
+    /* ------------------------------------------------------------ */
+    /*
+     * @see javax.servlet.ServletRequest.getContentLengthLong()
+     */
+    @Override
+    public long getContentLengthLong()
+    {
+        return _fields.getLongField(HttpHeader.CONTENT_LENGTH.toString());
     }
 
     /* ------------------------------------------------------------ */
@@ -1395,16 +1405,6 @@ public class Request implements HttpServletRequest
         return null;
     }
 
-    /* ------------------------------------------------------------ */
-    /**
-     * Get timestamp of the request dispatch
-     *
-     * @return timestamp
-     */
-    public long getDispatchTime()
-    {
-        return _dispatchTime;
-    }
 
     /* ------------------------------------------------------------ */
     public boolean isHandled()
@@ -1619,9 +1619,7 @@ public class Request implements HttpServletRequest
     /* ------------------------------------------------------------ */
     /*
      * Set a request attribute. if the attribute name is "org.eclipse.jetty.server.server.Request.queryEncoding" then the value is also passed in a call to
-     * {@link #setQueryEncoding}. <p> if the attribute name is "org.eclipse.jetty.server.server.ResponseBuffer", then the response buffer is flushed with @{link
-     * #flushResponseBuffer} <p> if the attribute name is "org.eclipse.jetty.io.EndPoint.maxIdleTime", then the value is passed to the associated {@link
-     * EndPoint#setIdleTimeout}.
+     * {@link #setQueryEncoding}.
      *
      * @see javax.servlet.ServletRequest#setAttribute(java.lang.String, java.lang.Object)
      */
@@ -1630,35 +1628,11 @@ public class Request implements HttpServletRequest
     {
         Object old_value = _attributes == null?null:_attributes.getAttribute(name);
 
-        if (name.startsWith("org.eclipse.jetty."))
-        {
-            if ("org.eclipse.jetty.server.Request.queryEncoding".equals(name))
-                setQueryEncoding(value == null?null:value.toString());
-            else if ("org.eclipse.jetty.server.sendContent".equals(name))
-            {
-                try
-                {
-                    ((HttpOutput)getServletResponse().getOutputStream()).sendContent(value);
-                }
-                catch (IOException e)
-                {
-                    throw new RuntimeException(e);
-                }
-            }
-            else if ("org.eclipse.jetty.server.ResponseBuffer".equals(name))
-            {
-                try
-                {
-                    throw new IOException("not implemented");
-                    //((HttpChannel.Output)getServletResponse().getOutputStream()).sendResponse(byteBuffer);
-                }
-                catch (IOException e)
-                {
-                    throw new RuntimeException(e);
-                }
-            }
-        }
-
+        if ("org.eclipse.jetty.server.Request.queryEncoding".equals(name))
+            setQueryEncoding(value == null?null:value.toString());
+        else if ("org.eclipse.jetty.server.sendContent".equals(name))
+            LOG.warn("Deprecated: org.eclipse.jetty.server.sendContent");
+        
         if (_attributes == null)
             _attributes = new AttributesMap();
         _attributes.setAttribute(name,value);
@@ -1997,18 +1971,6 @@ public class Request implements HttpServletRequest
     }
 
     /* ------------------------------------------------------------ */
-    /**
-     * Set timetstamp of request dispatch
-     *
-     * @param value
-     *            timestamp
-     */
-    public void setDispatchTime(long value)
-    {
-        _dispatchTime = value;
-    }
-
-    /* ------------------------------------------------------------ */
     @Override
     public AsyncContext startAsync() throws IllegalStateException
     {
@@ -2208,5 +2170,33 @@ public class Request implements HttpServletRequest
 
         setParameters(parameters);
         setQueryString(query);
+    }
+
+
+   
+    /** 
+     * @see javax.servlet.http.HttpServletRequest#upgrade(java.lang.Class)
+     */
+    @Override
+    public <T extends HttpUpgradeHandler> T upgrade(Class<T> handlerClass) throws IOException, ServletException
+    {
+        if (getContext() == null)
+            throw new ServletException ("Unable to instantiate "+handlerClass);
+
+        try
+        {
+            //Instantiate an instance and inject it
+            T h = getContext().createInstance(handlerClass);
+            
+            //TODO handle the rest of the upgrade process
+            
+            return h;
+        }
+        catch (Exception e)
+        {
+            if (e instanceof ServletException)
+                throw (ServletException)e;
+            throw new ServletException(e);
+        }
     }
 }

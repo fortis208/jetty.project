@@ -18,6 +18,9 @@
 
 package org.eclipse.jetty.client.ssl;
 
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
+
 import java.io.BufferedReader;
 import java.io.EOFException;
 import java.io.File;
@@ -48,6 +51,7 @@ import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.eclipse.jetty.client.ssl.SslBytesTest.TLSRecord.Type;
 import org.eclipse.jetty.http.HttpParser;
 import org.eclipse.jetty.io.Connection;
 import org.eclipse.jetty.io.EndPoint;
@@ -163,7 +167,7 @@ public class SslBytesServerTest extends SslBytesTest
             }
         };
 
-        ServerConnector connector = new ServerConnector(server, sslFactory, httpFactory)
+        ServerConnector connector = new ServerConnector(server, null,null,null,1,1,sslFactory, httpFactory)
         {
             @Override
             protected SelectChannelEndPoint newEndPoint(SocketChannel channel, ManagedSelector selectSet, SelectionKey key) throws IOException
@@ -387,7 +391,14 @@ public class SslBytesServerTest extends SslBytesTest
 
         // Socket close
         record = proxy.readFromServer();
-        Assert.assertNull(String.valueOf(record), record);
+        if (record!=null)
+        {
+            Assert.assertEquals(record.getType(),Type.ALERT);
+            
+            // Now should be a raw close
+            record = proxy.readFromServer();
+            Assert.assertNull(String.valueOf(record), record);
+        }
     }
 
     @Test
@@ -675,7 +686,15 @@ public class SslBytesServerTest extends SslBytesTest
 
         // Socket close
         record = proxy.readFromServer();
-        Assert.assertNull(String.valueOf(record), record);
+        // Raw close or alert
+        if (record!=null)
+        {
+            Assert.assertEquals(record.getType(),Type.ALERT);
+            
+            // Now should be a raw close
+            record = proxy.readFromServer();
+            Assert.assertNull(String.valueOf(record), record);
+        }
     }
 
     @Test
@@ -730,7 +749,14 @@ public class SslBytesServerTest extends SslBytesTest
 
         // Socket close
         record = proxy.readFromServer();
-        Assert.assertNull(record);
+        if (record!=null)
+        {
+            Assert.assertEquals(record.getType(),Type.ALERT);
+            
+            // Now should be a raw close
+            record = proxy.readFromServer();
+            Assert.assertNull(String.valueOf(record), record);
+        }
 
         // Check that we did not spin
         TimeUnit.MILLISECONDS.sleep(500);
@@ -798,7 +824,14 @@ public class SslBytesServerTest extends SslBytesTest
 
         // Socket close
         record = proxy.readFromServer();
-        Assert.assertNull(String.valueOf(record), record);
+        if (record!=null)
+        {
+            Assert.assertEquals(record.getType(),Type.ALERT);
+            
+            // Now should be a raw close
+            record = proxy.readFromServer();
+            Assert.assertNull(String.valueOf(record), record);
+        }
 
         // Check that we did not spin
         TimeUnit.MILLISECONDS.sleep(500);
@@ -850,9 +883,17 @@ public class SslBytesServerTest extends SslBytesTest
         // Close the raw socket, this generates a truncation attack
         proxy.flushToServer(null);
 
-        // Expect raw close from server
+        // Expect raw close from server OR ALERT
         record = proxy.readFromServer();
-        Assert.assertNull(String.valueOf(record), record);
+        // TODO check that this is OK?
+        if (record!=null)
+        {
+            Assert.assertEquals(record.getType(),Type.ALERT);
+            
+            // Now should be a raw close
+            record = proxy.readFromServer();
+            Assert.assertNull(String.valueOf(record), record);
+        }
 
         // Check that we did not spin
         TimeUnit.MILLISECONDS.sleep(500);
@@ -902,7 +943,14 @@ public class SslBytesServerTest extends SslBytesTest
 
         // Expect raw close from server
         record = proxy.readFromServer();
-        Assert.assertNull(String.valueOf(record), record);
+        if (record!=null)
+        {
+            Assert.assertEquals(record.getType(),Type.ALERT);
+            
+            // Now should be a raw close
+            record = proxy.readFromServer();
+            Assert.assertNull(String.valueOf(record), record);
+        }
 
         // Check that we did not spin
         TimeUnit.MILLISECONDS.sleep(500);
@@ -1096,7 +1144,14 @@ public class SslBytesServerTest extends SslBytesTest
 
         // Socket close
         record = proxy.readFromServer();
-        Assert.assertNull(record);
+        if (record!=null)
+        {
+            Assert.assertEquals(record.getType(),Type.ALERT);
+            
+            // Now should be a raw close
+            record = proxy.readFromServer();
+            Assert.assertNull(String.valueOf(record), record);
+        }
 
         // Check that we did not spin
         TimeUnit.MILLISECONDS.sleep(500);
@@ -1815,6 +1870,11 @@ public class SslBytesServerTest extends SslBytesTest
 
         // Socket close
         record = proxy.readFromServer();
-        Assert.assertNull(String.valueOf(record), record);
+        if (record!=null)
+        {
+            Assert.assertEquals(record.getType(),Type.ALERT);
+            record = proxy.readFromServer();
+        }
+        Assert.assertThat(record,nullValue());
     }
 }

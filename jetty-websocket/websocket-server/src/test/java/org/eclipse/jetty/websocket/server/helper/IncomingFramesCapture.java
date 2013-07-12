@@ -37,7 +37,7 @@ public class IncomingFramesCapture implements IncomingFrames
 {
     private static final Logger LOG = Log.getLogger(IncomingFramesCapture.class);
     private EventQueue<WebSocketFrame> frames = new EventQueue<>();
-    private EventQueue<WebSocketException> errors = new EventQueue<>();
+    private EventQueue<Throwable> errors = new EventQueue<>();
 
     public void assertErrorCount(int expectedCount)
     {
@@ -86,14 +86,14 @@ public class IncomingFramesCapture implements IncomingFrames
         for (Frame frame : frames)
         {
             System.err.printf("[%3d] %s%n",i++,frame);
-            System.err.printf("          %s%n",BufferUtil.toDetailString(frame.getPayload()));
+            System.err.printf("          payload: %s%n",BufferUtil.toDetailString(frame.getPayload()));
         }
     }
 
-    public int getErrorCount(Class<? extends WebSocketException> errorType)
+    public int getErrorCount(Class<? extends Throwable> errorType)
     {
         int count = 0;
-        for (WebSocketException error : errors)
+        for (Throwable error : errors)
         {
             if (errorType.isInstance(error))
             {
@@ -103,7 +103,7 @@ public class IncomingFramesCapture implements IncomingFrames
         return count;
     }
 
-    public Queue<WebSocketException> getErrors()
+    public Queue<Throwable> getErrors()
     {
         return errors;
     }
@@ -127,7 +127,7 @@ public class IncomingFramesCapture implements IncomingFrames
     }
 
     @Override
-    public void incomingError(WebSocketException e)
+    public void incomingError(Throwable e)
     {
         LOG.debug(e);
         errors.add(e);

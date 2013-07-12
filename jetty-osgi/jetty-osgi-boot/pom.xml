@@ -2,7 +2,7 @@
   <parent>
     <groupId>org.eclipse.jetty.osgi</groupId>
     <artifactId>jetty-osgi-project</artifactId>
-    <version>9.0.4-SNAPSHOT</version>
+    <version>9.1.0-SNAPSHOT</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <artifactId>jetty-osgi-boot</artifactId>
@@ -108,8 +108,8 @@
  javax.mail.internet;version="1.4.0";resolution:=optional,
  javax.mail.search;version="1.4.0";resolution:=optional,
  javax.mail.util;version="1.4.0";resolution:=optional,
- javax.servlet;version="2.6.0",
- javax.servlet.http;version="2.6.0",
+ javax.servlet;version="[2.6,3.2)",
+ javax.servlet.http;version="[2.6,3.2)",
  javax.transaction;version="1.1.0";resolution:=optional,
  javax.transaction.xa;version="1.1.0";resolution:=optional,
  org.eclipse.jetty.annotations;version="9.0.0";resolution:=optional,

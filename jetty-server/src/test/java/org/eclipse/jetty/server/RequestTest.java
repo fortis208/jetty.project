@@ -37,9 +37,11 @@ import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
+import javax.servlet.ServletInputStream;
 import javax.servlet.ServletRequestEvent;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
@@ -52,6 +54,7 @@ import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.util.IO;
 import org.eclipse.jetty.util.MultiPartInputStreamParser;
 import org.eclipse.jetty.util.StringUtil;
+import org.eclipse.jetty.util.Utf8Appendable;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.log.StdErrLog;
@@ -100,24 +103,11 @@ public class RequestTest
             @Override
             public boolean check(HttpServletRequest request,HttpServletResponse response)
             {
-                Map map = null;
-                try
-                {
-                    //do the parse
-                    request.getParameterMap();
-                    Assert.fail("Expected parsing failure");
-                    return false;
-                }
-                catch (Exception e)
-                {
-                    //catch the error and check the param map is not null
-                    map = request.getParameterMap();
-                    assertFalse(map == null);
-                    assertTrue(map.isEmpty());
-
-                    Enumeration names = request.getParameterNames();
-                    assertFalse(names.hasMoreElements());
-                }
+                Map<String,String[]> map = null;
+                //do the parse
+                map = request.getParameterMap();
+                assertEquals("aaa"+Utf8Appendable.REPLACEMENT+"bbb",map.get("param")[0]);
+                assertEquals("value",map.get("other")[0]);
 
                 return true;
             }
@@ -125,7 +115,7 @@ public class RequestTest
 
         //Send a request with query string with illegal hex code to cause
         //an exception parsing the params
-        String request="GET /?param=%ZZaaa HTTP/1.1\r\n"+
+        String request="GET /?param=aaa%ZZbbb&other=value HTTP/1.1\r\n"+
         "Host: whatever\r\n"+
         "Content-Type: text/html;charset=utf8\n"+
         "Connection: close\n"+
@@ -482,15 +472,25 @@ public class RequestTest
     @Test
     public void testContent() throws Exception
     {
-        final int[] length=new int[1];
+        final AtomicInteger length=new AtomicInteger();
 
         _handler._checker = new RequestTester()
         {
             @Override
-            public boolean check(HttpServletRequest request,HttpServletResponse response)
+            public boolean check(HttpServletRequest request,HttpServletResponse response) throws IOException
             {
-                //assertEquals(request.getContentLength(), ((Request)request).getContentRead());
-                length[0]=request.getContentLength();
+                int len=request.getContentLength();
+                ServletInputStream in = request.getInputStream();
+                for (int i=0;i<len;i++)
+                {
+                    int b=in.read();
+                    if (b<0)
+                        return false;
+                }
+                if (in.read()>0)
+                    return false;
+
+                length.set(len);
                 return true;
             }
         };
@@ -498,11 +498,11 @@ public class RequestTest
 
         String content="";
 
-        for (int l=0;l<1025;l++)
+        for (int l=0;l<1024;l++)
         {
             String request="POST / HTTP/1.1\r\n"+
             "Host: whatever\r\n"+
-            "Content-Type: text/test\r\n"+
+            "Content-Type: multipart/form-data-test\r\n"+
             "Content-Length: "+l+"\r\n"+
             "Connection: close\r\n"+
             "\r\n"+
@@ -510,9 +510,8 @@ public class RequestTest
             Log.getRootLogger().debug("test l={}",l);
             String response = _connector.getResponses(request);
             Log.getRootLogger().debug(response);
-            assertEquals(l,length[0]);
-            if (l>0)
-                assertEquals(l,_handler._content.length());
+            assertThat(response,Matchers.containsString(" 200 OK"));
+            assertEquals(l,length.get());
             content+="x";
         }
     }
