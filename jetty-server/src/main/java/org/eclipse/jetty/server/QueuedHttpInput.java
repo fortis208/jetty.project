@@ -42,16 +42,10 @@ public abstract class QueuedHttpInput<T> extends HttpInput<T>
 {
     private final static Logger LOG = Log.getLogger(QueuedHttpInput.class);
 
-    private final ArrayQueue<T> _inputQ = new ArrayQueue<>();
+    private final ArrayQueue<T> _inputQ = new ArrayQueue<>(lock());
     
     public QueuedHttpInput()
-    {
-    }
-    
-    public Object lock()
-    {
-        return _inputQ.lock();
-    }
+    {}
 
     public void recycle()
     {
@@ -164,41 +158,5 @@ public abstract class QueuedHttpInput<T> extends HttpInput<T>
             lock().notify();
         }
     }
-
-    /* ------------------------------------------------------------ */
-    public void consumeAll()
-    {
-        synchronized (lock())
-        {
-            T item = _inputQ.peekUnsafe();
-            
-            while (!_state.isEOF())
-            {
-                while (item != null)
-                {
-                    _inputQ.pollUnsafe();
-                    onContentConsumed(item);
-
-                    item = _inputQ.peekUnsafe();
-                    if (item == null)
-                        onAllContentConsumed();
-                }
-
-                try
-                {
-                    blockForContent();
-                    item = _inputQ.peekUnsafe();
-                    
-                    if (item==null)
-                        checkEOF();
-                }
-                catch (IOException e)
-                {
-                    throw new RuntimeIOException(e);
-                }
-            }
-        }
-    }
-
 
 }

@@ -53,7 +53,6 @@ class HttpInputOverHTTP extends HttpInput<ByteBuffer> implements Callback
         }
     }
 
-
     @Override
     protected void blockForContent() throws IOException
     {
@@ -63,7 +62,8 @@ class HttpInputOverHTTP extends HttpInput<ByteBuffer> implements Callback
             LOG.debug("{} block readable on {}",this,_readBlocker);
             _readBlocker.block();
             
-            if (nextContent()!=null || isFinished())
+            Object content=getNextContent();
+            if (content!=null || isFinished())
                 break;
         }
     }
@@ -72,12 +72,6 @@ class HttpInputOverHTTP extends HttpInput<ByteBuffer> implements Callback
     public String toString()
     {
         return String.format("%s@%x",getClass().getSimpleName(),hashCode());
-    }
-    
-    @Override
-    public Object lock()
-    {
-        return this;
     }
 
     @Override
@@ -119,7 +113,6 @@ class HttpInputOverHTTP extends HttpInput<ByteBuffer> implements Callback
                 }
                 return null;
             }
-            
         }
             
         return null; 
@@ -139,6 +132,12 @@ class HttpInputOverHTTP extends HttpInput<ByteBuffer> implements Callback
         item.get(buffer, offset, l);
         return l;
     }
+    
+    @Override
+    protected void consume(ByteBuffer item, int length)
+    {
+        item.position(item.position()+length);
+    }
 
     @Override
     public void content(ByteBuffer item)
@@ -146,53 +145,6 @@ class HttpInputOverHTTP extends HttpInput<ByteBuffer> implements Callback
         if (BufferUtil.hasContent(_content))
             throw new IllegalStateException();
         _content=item;
-    }
-
-    @Override
-    public void consumeAll()
-    {
-        final HttpParser parser = _httpConnection.getParser();
-        try
-        {
-            ByteBuffer requestBuffer = null;
-            while (!parser.isComplete())
-            {                
-                _content=null;
-                _httpConnection.getParser().parseNext(requestBuffer==null?BufferUtil.EMPTY_BUFFER:requestBuffer);
-                
-                if (parser.isComplete())
-                    break;
-
-                if (BufferUtil.isEmpty(requestBuffer))
-                {
-                    if ( _httpConnection.getEndPoint().isInputShutdown())
-                        parser.atEOF();
-                    else
-                    {
-                        requestBuffer=_httpConnection.getRequestBuffer();
-                        
-                        if (BufferUtil.isEmpty(requestBuffer))
-                        {
-                            int filled=_httpConnection.getEndPoint().fill(requestBuffer);
-                            if (filled==0)
-                                filled=_httpConnection.getEndPoint().fill(requestBuffer);
-
-                            if (filled<0)
-                                _httpConnection.getParser().atEOF();
-                            else if (filled==0)
-                            {
-                                blockForContent();
-                            }      
-                        }
-                    }
-                }
-            }
-        }
-        catch(IOException e)
-        {
-            LOG.ignore(e);
-            _httpConnection.getParser().atEOF();
-        }
     }
 
     @Override
