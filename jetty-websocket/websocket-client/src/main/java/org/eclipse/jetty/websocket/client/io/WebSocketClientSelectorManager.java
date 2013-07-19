@@ -72,34 +72,26 @@ public class WebSocketClientSelectorManager extends SelectorManager
 
         try
         {
-            String scheme = connectPromise.getRequest().getRequestURI().getScheme();
-
-            if ("wss".equalsIgnoreCase(scheme))
+            if (connectPromise.isUsingProxy())
             {
-                // Encrypted "wss://"
-                SslContextFactory sslContextFactory = getSslContextFactory();
-                if (sslContextFactory != null)
-                {
-                    SSLEngine engine = newSSLEngine(sslContextFactory,channel);
-                    SslConnection sslConnection = new SslConnection(bufferPool,getExecutor(),endPoint,engine);
-                    sslConnection.setRenegotiationAllowed(sslContextFactory.isRenegotiationAllowed());
-                    EndPoint sslEndPoint = sslConnection.getDecryptedEndPoint();
-
-                    Connection connection = newUpgradeConnection(channel,sslEndPoint,connectPromise);
-                    sslEndPoint.setIdleTimeout(connectPromise.getClient().getMaxIdleTimeout());
-                    sslEndPoint.setConnection(connection);
-                    return sslConnection;
-                }
-                else
-                {
-                    throw new IOException("Cannot init SSL");
-                }
+                endPoint.setIdleTimeout(connectPromise.getClient().getMaxIdleTimeout());
+                return newProxyConnection(channel,endPoint,connectPromise);
             }
             else
             {
-                // Standard "ws://"
-                endPoint.setIdleTimeout(connectPromise.getClient().getMaxIdleTimeout());
-                return newUpgradeConnection(channel,endPoint,connectPromise);
+                String scheme = connectPromise.getRequest().getRequestURI().getScheme();
+
+                if ("wss".equalsIgnoreCase(scheme))
+                {
+                    // Encrypted "wss://"
+                    return newSslUpgradeConnection(channel,endPoint,connectPromise);
+                }
+                else
+                {
+                    // Standard "ws://"
+                    endPoint.setIdleTimeout(connectPromise.getClient().getMaxIdleTimeout());
+                    return newUpgradeConnection(channel,endPoint,connectPromise);
+                }
             }
         }
         catch (IOException e)
@@ -132,6 +124,35 @@ public class WebSocketClientSelectorManager extends SelectorManager
         WebSocketClient client = connectPromise.getClient();
         Executor executor = client.getExecutor();
         UpgradeConnection connection = new UpgradeConnection(endPoint,executor,connectPromise);
+        return connection;
+    }
+
+    public SslConnection newSslUpgradeConnection(SocketChannel channel, EndPoint endPoint, ConnectPromise connectPromise) throws IOException
+    {
+        SslContextFactory sslContextFactory = getSslContextFactory();
+        if (sslContextFactory != null)
+        {
+            SSLEngine engine = newSSLEngine(sslContextFactory,channel);
+            SslConnection sslConnection = new SslConnection(bufferPool,getExecutor(),endPoint,engine);
+            sslConnection.setRenegotiationAllowed(sslContextFactory.isRenegotiationAllowed());
+            EndPoint sslEndPoint = sslConnection.getDecryptedEndPoint();
+
+            Connection connection = newUpgradeConnection(channel,sslEndPoint,connectPromise);
+            sslEndPoint.setIdleTimeout(connectPromise.getClient().getMaxIdleTimeout());
+            sslEndPoint.setConnection(connection);
+            return sslConnection;
+        }
+        else
+        {
+            throw new IOException("Cannot init SSL");
+        }
+    }
+
+    public ProxyConnection newProxyConnection(SocketChannel channel, EndPoint endPoint, ConnectPromise connectPromise)
+    {
+        WebSocketClient client = connectPromise.getClient();
+        Executor executor = client.getExecutor();
+        ProxyConnection connection = new ProxyConnection(endPoint,executor,connectPromise,channel,this);
         return connection;
     }
 

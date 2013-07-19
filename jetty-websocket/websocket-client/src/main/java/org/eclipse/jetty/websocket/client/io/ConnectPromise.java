@@ -37,6 +37,7 @@ public abstract class ConnectPromise extends FuturePromise<Session> implements R
     private final ClientUpgradeRequest request;
     private final Masker masker;
     private ClientUpgradeResponse response;
+    private boolean usingProxy = false;
 
     public ConnectPromise(WebSocketClient client, EventDriver driver, ClientUpgradeRequest request)
     {
@@ -92,5 +93,15 @@ public abstract class ConnectPromise extends FuturePromise<Session> implements R
         session.setUpgradeResponse(response);
         session.open();
         super.succeeded(session);
+    }
+    
+    public boolean isUsingProxy()
+    {
+        return usingProxy;
+    }
+
+    public void setUsingProxy(boolean usingProxy)
+    {
+        this.usingProxy = usingProxy;
     }
 }

@@ -69,7 +69,16 @@ public class ConnectionManager extends ContainerLifeCycle
                 channel.socket().setTcpNoDelay(true); // disable nagle
                 channel.configureBlocking(false); // async always
 
-                InetSocketAddress address = toSocketAddress(wsUri);
+                InetSocketAddress address;
+                if (getClient().getProxyConfiguration() != null)
+                {
+                    address = getClient().getProxyConfiguration().toSocketAddress();
+                    setUsingProxy(true);
+                }
+                else
+                {
+                    address = toSocketAddress(wsUri);
+                }
 
                 channel.connect(address);
                 getSelector().connect(channel,this);

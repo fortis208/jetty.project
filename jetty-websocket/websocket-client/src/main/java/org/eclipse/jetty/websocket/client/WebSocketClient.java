@@ -71,20 +71,27 @@ public class WebSocketClient extends ContainerLifeCycle
     private ConnectionManager connectionManager;
     private Masker masker;
     private SocketAddress bindAddress;
+    private ProxyConfiguration proxyConfig;
     private long connectTimeout = SelectorManager.DEFAULT_CONNECT_TIMEOUT;
 
     public WebSocketClient()
     {
         this(null);
     }
-
+    
     public WebSocketClient(SslContextFactory sslContextFactory)
+    {
+    	this(sslContextFactory, null);
+    }
+
+    public WebSocketClient(SslContextFactory sslContextFactory, ProxyConfiguration proxyConfig)
     {
         this.sslContextFactory = sslContextFactory;
         this.policy = WebSocketPolicy.newClientPolicy();
         this.extensionRegistry = new WebSocketExtensionFactory(policy,bufferPool);
         this.masker = new RandomMasker();
         this.eventDriverFactory = new EventDriverFactory(policy);
+        this.proxyConfig = proxyConfig;
     }
 
     public Future<Session> connect(Object websocket, URI toUri) throws IOException
@@ -361,5 +368,15 @@ public class WebSocketClient extends ContainerLifeCycle
     public void setMaxIdleTimeout(long milliseconds)
     {
         this.policy.setIdleTimeout(milliseconds);
+    }
+
+    public ProxyConfiguration getProxyConfiguration() 
+    {
+        return proxyConfig;
+    }
+
+    public void setProxyConfiguration(ProxyConfiguration proxyConfig)
+    {
+        this.proxyConfig = proxyConfig;
     }
 }
