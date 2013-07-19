@@ -1,11 +1,14 @@
 package org.eclipse.jetty.websocket.client;
 
 import java.net.InetSocketAddress;
+import org.eclipse.jetty.util.B64Code;
 
 public class ProxyConfiguration
 {
     private String proxyHost;
     private int proxyPort;
+    private String username;
+    private String password;
 
     public ProxyConfiguration()
     {
@@ -40,5 +43,30 @@ public class ProxyConfiguration
     public InetSocketAddress toSocketAddress()
     {
         return new InetSocketAddress(proxyHost,proxyPort);
+    }
+
+    public String getUsername()
+    {
+        return username;
+    }
+
+    public void setUsername(String username)
+    {
+        this.username = username;
+    }
+
+    public String getPassword()
+    {
+        return password;
+    }
+
+    public void setPassword(String password)
+    {
+        this.password = password;
+    }
+
+    public String getBasicAuthCredentials()
+    {
+        return B64Code.encode(username + ":" + password);
     }
 }

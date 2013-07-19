@@ -41,6 +41,7 @@ public class ProxyConnection extends AbstractConnection
     }
 
     private static final int OK = 200;
+    private static final int PROXY_AUTHENTICATION_REQUIRED = 407;
 
     private static final Logger LOG = Log.getLogger(ProxyConnection.class);
     private final ByteBufferPool bufferPool;
@@ -55,7 +56,7 @@ public class ProxyConnection extends AbstractConnection
         super(endp,executor);
         this.connectPromise = connectPromise;
         this.bufferPool = connectPromise.getClient().getBufferPool();
-        this.request = new ProxyConnectRequest(connectPromise.getRequest());
+        this.request = new ProxyConnectRequest(connectPromise.getRequest(),connectPromise.getClient().getProxyConfiguration());
         this.channel = channel;
         this.selector = selector;
 
@@ -191,6 +192,12 @@ public class ProxyConnection extends AbstractConnection
 
     private void validateResponse(ProxyConnectResponse response)
     {
+        // Restart connection if using digest authorization scheme
+        if (response.getStatusCode() == PROXY_AUTHENTICATION_REQUIRED)
+        {
+            // TODO
+        }
+
         // Validate Response Status Code
         if (response.getStatusCode() != OK)
         {

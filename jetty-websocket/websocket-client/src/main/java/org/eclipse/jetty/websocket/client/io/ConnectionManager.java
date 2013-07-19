@@ -73,6 +73,7 @@ public class ConnectionManager extends ContainerLifeCycle
                 if (getClient().getProxyConfiguration() != null)
                 {
                     address = getClient().getProxyConfiguration().toSocketAddress();
+                    LOG.debug("Connecting through proxy " + address);
                     setUsingProxy(true);
                 }
                 else

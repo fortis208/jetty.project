@@ -3,14 +3,17 @@ package org.eclipse.jetty.websocket.client.io;
 import java.net.URI;
 
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
+import org.eclipse.jetty.websocket.client.ProxyConfiguration;
 
 public class ProxyConnectRequest
 {
     private ClientUpgradeRequest request;
+    private ProxyConfiguration proxyConfig;
 
-    public ProxyConnectRequest(ClientUpgradeRequest request)
+    public ProxyConnectRequest(ClientUpgradeRequest request, ProxyConfiguration proxyConfig)
     {
         this.request = request;
+        this.proxyConfig = proxyConfig;
     }
 
     public String generate()
@@ -44,6 +47,14 @@ public class ProxyConnectRequest
             request.append(':').append(uri.getPort());
         }
         request.append("\r\n");
+        
+        // add authorization headers
+        if (proxyConfig != null && proxyConfig.getUsername() != null && proxyConfig.getPassword() != null)
+        {
+            request.append("Proxy-Authorization: Basic ");
+            request.append(proxyConfig.getBasicAuthCredentials());
+            request.append("\r\n");
+        }
 
         // request header end
         request.append("\r\n");
