@@ -76,12 +76,17 @@ public class WebSocketClient extends ContainerLifeCycle
 
     public WebSocketClient()
     {
-        this(null);
+        this(null, null);
     }
     
     public WebSocketClient(SslContextFactory sslContextFactory)
     {
     	this(sslContextFactory, null);
+    }
+    
+    public WebSocketClient(ProxyConfiguration proxyConfig)
+    {
+        this(null, proxyConfig);
     }
 
     public WebSocketClient(SslContextFactory sslContextFactory, ProxyConfiguration proxyConfig)
