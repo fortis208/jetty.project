@@ -16,8 +16,15 @@ public class ProxyConfiguration
 
     public ProxyConfiguration(String host, int port)
     {
+        this(host, port, null, null);
+    }
+
+    public ProxyConfiguration(String host, int port, String username, String password)
+    {
         this.proxyHost = host;
         this.proxyPort = port;
+        this.username = username;
+        this.password = password;
     }
 
     public String getProxyHost()
@@ -43,6 +50,11 @@ public class ProxyConfiguration
     public InetSocketAddress toSocketAddress()
     {
         return new InetSocketAddress(proxyHost,proxyPort);
+    }
+    
+    public boolean hasAuth()
+    {
+        return username != null && password != null;
     }
 
     public String getUsername()

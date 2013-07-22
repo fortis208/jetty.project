@@ -14,6 +14,7 @@ import org.eclipse.jetty.util.FutureCallback;
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
+import org.eclipse.jetty.websocket.client.ProxyConfiguration;
 import org.eclipse.jetty.websocket.common.io.http.HttpResponseHeaderParser;
 import org.eclipse.jetty.websocket.common.io.http.HttpResponseHeaderParser.ParseException;
 
@@ -42,26 +43,31 @@ public class ProxyConnection extends AbstractConnection
 
     private static final int OK = 200;
     private static final int PROXY_AUTHENTICATION_REQUIRED = 407;
+    
+    private static final String PROXY_AUTHENTICATION_HEADER = "Proxy-Authentication";
+    private static final String PROXY_AUTHORIZATION_HEADER = "Proxy-Authorization";
 
     private static final Logger LOG = Log.getLogger(ProxyConnection.class);
     private final ByteBufferPool bufferPool;
     private final ConnectPromise connectPromise;
-    private final HttpResponseHeaderParser parser;
+    private final SocketChannel channel;
+    private final WebSocketClientSelectorManager selector;
+    private final ProxyConfiguration proxyConfig;
+    private ProxyResponseParser parser;
     private ProxyConnectRequest request;
-    private SocketChannel channel;
-    private WebSocketClientSelectorManager selector;
 
     public ProxyConnection(EndPoint endp, Executor executor, ConnectPromise connectPromise, SocketChannel channel, WebSocketClientSelectorManager selector)
     {
         super(endp,executor);
         this.connectPromise = connectPromise;
         this.bufferPool = connectPromise.getClient().getBufferPool();
-        this.request = new ProxyConnectRequest(connectPromise.getRequest(),connectPromise.getClient().getProxyConfiguration());
         this.channel = channel;
         this.selector = selector;
+        this.proxyConfig = connectPromise.getClient().getProxyConfiguration();
 
-        // Setup the parser
-        this.parser = new HttpResponseHeaderParser(new ProxyConnectResponse());
+        this.request = new ProxyConnectRequest(connectPromise.getRequest());
+        // Setup the response parser
+        this.parser = new ProxyResponseParser(new ProxyConnectResponse());
     }
 
     public void disconnect(boolean onlyOutput)
@@ -137,12 +143,14 @@ public class ProxyConnection extends AbstractConnection
                     {
                         LOG.debug("Filled {} bytes - {}",filled,BufferUtil.toDetailString(buffer));
                     }
-                    ProxyConnectResponse resp = (ProxyConnectResponse)parser.parse(buffer);
+                    ProxyConnectResponse resp = parser.parse(buffer);
                     if (resp != null)
                     {
                         // Got a response!
-                        validateResponse(resp);
-                        startConnection(resp);
+                        if (validateResponse(resp))
+                        {
+                            startConnection(resp);
+                        }
                         if (buffer.hasRemaining())
                         {
                             LOG.debug("Has remaining client bytebuffer of {}",buffer.remaining());
@@ -190,12 +198,23 @@ public class ProxyConnection extends AbstractConnection
         connection.onOpen();
     }
 
-    private void validateResponse(ProxyConnectResponse response)
+    private boolean validateResponse(ProxyConnectResponse response)
     {
         // Restart connection if using digest authorization scheme
         if (response.getStatusCode() == PROXY_AUTHENTICATION_REQUIRED)
         {
-            // TODO
+            LOG.debug("Proxy requires authentication");
+            if (request.getHeader(PROXY_AUTHORIZATION_HEADER) == null && proxyConfig.hasAuth())
+            {
+                LOG.debug("Add basic proxy authorization header");
+                request.addHeader(PROXY_AUTHORIZATION_HEADER,"Basic " + proxyConfig.getBasicAuthCredentials());
+                
+                // reset parser
+                this.parser = new ProxyResponseParser(new ProxyConnectResponse());
+                // queue new connection request
+                getExecutor().execute(new SendConnectRequest());
+                return false;
+            }
         }
 
         // Validate Response Status Code
@@ -204,6 +223,8 @@ public class ProxyConnection extends AbstractConnection
             String message = "Proxy CONNECT failed: " + response.getStatusCode() + " - " + response.getStatusReason();
             throw new ProxyConnectException(request.getRequestURI(),response.getStatusCode(),message);
         }
+        
+        return true;
     }
 
     WebSocketClientSelectorManager getSelector()

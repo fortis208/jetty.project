@@ -10,6 +10,7 @@ public class ProxyConnectResponse implements HttpResponseHeaderParseListener
     private int statusCode;
     private String statusReason;
     private HashMap<String, String> headers;
+    private ByteBuffer remaining;
 
     public ProxyConnectResponse()
     {
@@ -19,14 +20,15 @@ public class ProxyConnectResponse implements HttpResponseHeaderParseListener
     @Override
     public void addHeader(String name, String value)
     {
-        this.headers.put(name,value);
+        this.headers.put(name.toLowerCase(),value);
     }
 
     @Override
     public void setRemainingBuffer(ByteBuffer copy)
     {
+        this.remaining = copy;
     }
-
+    
     @Override
     public void setStatusCode(int statusCode)
     {
@@ -47,5 +49,15 @@ public class ProxyConnectResponse implements HttpResponseHeaderParseListener
     public String getStatusReason()
     {
         return statusReason;
+    }
+
+    public ByteBuffer getRemainingBuffer()
+    {
+        return remaining;
+    }
+
+    public String getHeader(String key)
+    {
+        return headers.get(key.toLowerCase());
     }
 }

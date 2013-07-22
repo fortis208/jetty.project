@@ -1,19 +1,34 @@
 package org.eclipse.jetty.websocket.client.io;
 
 import java.net.URI;
+import java.util.HashMap;
 
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
-import org.eclipse.jetty.websocket.client.ProxyConfiguration;
 
 public class ProxyConnectRequest
 {
     private ClientUpgradeRequest request;
-    private ProxyConfiguration proxyConfig;
+    private HashMap<String, String> headers;
 
-    public ProxyConnectRequest(ClientUpgradeRequest request, ProxyConfiguration proxyConfig)
+    public ProxyConnectRequest(ClientUpgradeRequest request)
     {
         this.request = request;
-        this.proxyConfig = proxyConfig;
+        this.headers = new HashMap<>();
+    }
+
+    public void addHeader(String key, String value)
+    {
+        headers.put(key,value);
+    }
+    
+    public HashMap<String, String> getHeaders()
+    {
+        return headers;
+    }
+    
+    public String getHeader(String key)
+    {
+        return headers.get(key);
     }
 
     public String generate()
@@ -48,11 +63,11 @@ public class ProxyConnectRequest
         }
         request.append("\r\n");
         
-        // add authorization headers
-        if (proxyConfig != null && proxyConfig.getUsername() != null && proxyConfig.getPassword() != null)
+        // Other headers
+        for (String key : getHeaders().keySet())
         {
-            request.append("Proxy-Authorization: Basic ");
-            request.append(proxyConfig.getBasicAuthCredentials());
+            request.append(key).append(": ");
+            request.append(getHeader(key));
             request.append("\r\n");
         }
 
