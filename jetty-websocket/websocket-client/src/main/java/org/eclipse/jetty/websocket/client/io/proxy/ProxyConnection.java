@@ -1,8 +1,10 @@
-package org.eclipse.jetty.websocket.client.io;
+package org.eclipse.jetty.websocket.client.io.proxy;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executor;
 
 import org.eclipse.jetty.io.AbstractConnection;
@@ -15,7 +17,8 @@ import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.websocket.client.ProxyConfiguration;
-import org.eclipse.jetty.websocket.common.io.http.HttpResponseHeaderParser;
+import org.eclipse.jetty.websocket.client.io.ConnectPromise;
+import org.eclipse.jetty.websocket.client.io.WebSocketClientSelectorManager;
 import org.eclipse.jetty.websocket.common.io.http.HttpResponseHeaderParser.ParseException;
 
 public class ProxyConnection extends AbstractConnection
@@ -44,9 +47,6 @@ public class ProxyConnection extends AbstractConnection
     private static final int OK = 200;
     private static final int PROXY_AUTHENTICATION_REQUIRED = 407;
     
-    private static final String PROXY_AUTHENTICATION_HEADER = "Proxy-Authentication";
-    private static final String PROXY_AUTHORIZATION_HEADER = "Proxy-Authorization";
-
     private static final Logger LOG = Log.getLogger(ProxyConnection.class);
     private final ByteBufferPool bufferPool;
     private final ConnectPromise connectPromise;
@@ -55,6 +55,7 @@ public class ProxyConnection extends AbstractConnection
     private final ProxyConfiguration proxyConfig;
     private ProxyResponseParser parser;
     private ProxyConnectRequest request;
+    private List<Authentication> authMethods = new ArrayList<>();
 
     public ProxyConnection(EndPoint endp, Executor executor, ConnectPromise connectPromise, SocketChannel channel, WebSocketClientSelectorManager selector)
     {
@@ -68,6 +69,9 @@ public class ProxyConnection extends AbstractConnection
         this.request = new ProxyConnectRequest(connectPromise.getRequest());
         // Setup the response parser
         this.parser = new ProxyResponseParser(new ProxyConnectResponse());
+        
+        this.authMethods.add(new DigestAuthentication(proxyConfig));
+        this.authMethods.add(new BasicAuthentication(proxyConfig));
     }
 
     public void disconnect(boolean onlyOutput)
@@ -204,11 +208,25 @@ public class ProxyConnection extends AbstractConnection
         if (response.getStatusCode() == PROXY_AUTHENTICATION_REQUIRED)
         {
             LOG.debug("Proxy requires authentication");
-            if (request.getHeader(PROXY_AUTHORIZATION_HEADER) == null && proxyConfig.hasAuth())
+            if (request.getHeader(Authentication.PROXY_AUTHORIZATION_HEADER) == null && proxyConfig.hasAuth())
             {
-                LOG.debug("Add basic proxy authorization header");
-                request.addHeader(PROXY_AUTHORIZATION_HEADER,"Basic " + proxyConfig.getBasicAuthCredentials());
+                List<String> challenge = response.getHeaders(Authentication.PROXY_AUTHENTICATION_HEADER);
+                if (challenge == null || challenge.size() == 0)
+                {
+                    String message = "Proxy requires authentication but failed to provide a challenge";
+                    throw new ProxyConnectException(request.getRequestURI(),response.getStatusCode(),message);
+                }
+
+                Authentication authentication = findAuthentication(challenge);
+                if (authentication == null)
+                {
+                    String message = "Failed to respond to proxy authentication challenge";
+                    throw new ProxyConnectException(request.getRequestURI(),response.getStatusCode(),message);
+                }
                 
+                // apply the authentication to the next request
+                authentication.apply(request);
+
                 // reset parser
                 this.parser = new ProxyResponseParser(new ProxyConnectResponse());
                 // queue new connection request
@@ -225,6 +243,22 @@ public class ProxyConnection extends AbstractConnection
         }
         
         return true;
+    }
+
+    private Authentication findAuthentication(List<String> challenges)
+    {
+        for (Authentication authMethod : authMethods)
+        {
+            for (String challenge : challenges)
+            {
+                if (authMethod.handles(challenge))
+                {
+                    authMethod.setChallenge(challenge);
+                    return authMethod;
+                }
+            }
+        }
+        return null;
     }
 
     WebSocketClientSelectorManager getSelector()

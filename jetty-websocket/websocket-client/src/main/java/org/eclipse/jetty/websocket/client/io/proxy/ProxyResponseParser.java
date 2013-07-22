@@ -1,4 +1,4 @@
-package org.eclipse.jetty.websocket.client.io;
+package org.eclipse.jetty.websocket.client.io.proxy;
 
 import java.nio.ByteBuffer;
 

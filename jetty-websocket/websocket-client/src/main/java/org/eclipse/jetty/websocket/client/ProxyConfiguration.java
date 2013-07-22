@@ -1,7 +1,6 @@
 package org.eclipse.jetty.websocket.client;
 
 import java.net.InetSocketAddress;
-import org.eclipse.jetty.util.B64Code;
 
 public class ProxyConfiguration
 {
@@ -75,10 +74,5 @@ public class ProxyConfiguration
     public void setPassword(String password)
     {
         this.password = password;
-    }
-
-    public String getBasicAuthCredentials()
-    {
-        return B64Code.encode(username + ":" + password);
     }
 }
