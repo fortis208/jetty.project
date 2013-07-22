@@ -26,7 +26,8 @@ public class BasicAuthentication implements Authentication
     }
 
     @Override
-    public void setChallenge(String challenge)
+    public boolean setChallenge(String challenge)
     {
+        return true;
     }
 }

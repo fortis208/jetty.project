@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.jetty.websocket.api.util.QuoteUtil;
 import org.eclipse.jetty.websocket.common.io.http.HttpResponseHeaderParseListener;
@@ -100,7 +101,7 @@ public class ProxyConnectResponse implements HttpResponseHeaderParseListener
         return ret.toString();
     }
 
-    public HashMap<String, List<String>> getHeaders()
+    public Map<String, List<String>> getHeaders()
     {
         return headers;
     }

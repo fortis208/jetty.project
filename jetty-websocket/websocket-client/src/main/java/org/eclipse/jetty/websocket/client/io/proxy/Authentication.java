@@ -8,7 +8,7 @@ public interface Authentication
 
     public boolean handles(String challenge);
 
-    public void setChallenge(String challenge);
+    public boolean setChallenge(String challenge);
 
     public void apply(ProxyConnectRequest request);
 }

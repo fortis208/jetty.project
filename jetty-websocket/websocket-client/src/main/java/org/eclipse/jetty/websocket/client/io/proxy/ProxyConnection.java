@@ -251,9 +251,8 @@ public class ProxyConnection extends AbstractConnection
         {
             for (String challenge : challenges)
             {
-                if (authMethod.handles(challenge))
+                if (authMethod.handles(challenge) && authMethod.setChallenge(challenge))
                 {
-                    authMethod.setChallenge(challenge);
                     return authMethod;
                 }
             }
