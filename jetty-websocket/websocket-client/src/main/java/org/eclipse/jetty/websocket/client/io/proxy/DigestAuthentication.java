@@ -190,6 +190,7 @@ public class DigestAuthentication implements Authentication
         value.append(", response=\"").append(hashA3).append("\"");
 
         request.addHeader(PROXY_AUTHORIZATION_HEADER,value.toString());
+        request.setAuthComplete(true);
     }
 
     private String nextNonceCount()

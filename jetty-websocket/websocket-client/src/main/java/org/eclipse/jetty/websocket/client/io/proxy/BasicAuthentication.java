@@ -23,6 +23,7 @@ public class BasicAuthentication implements Authentication
     {
         String authorization = "Basic " + B64Code.encode(proxyConfig.getUsername() + ":" + proxyConfig.getPassword());
         request.addHeader(Authentication.PROXY_AUTHORIZATION_HEADER,authorization);
+        request.setAuthComplete(true);
     }
 
     @Override

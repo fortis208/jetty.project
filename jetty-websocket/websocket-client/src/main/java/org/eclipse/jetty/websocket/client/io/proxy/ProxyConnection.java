@@ -70,6 +70,7 @@ public class ProxyConnection extends AbstractConnection
         // Setup the response parser
         this.parser = new ProxyResponseParser(new ProxyConnectResponse());
         
+        this.authMethods.add(new NTLMAuthentication(proxyConfig));
         this.authMethods.add(new DigestAuthentication(proxyConfig));
         this.authMethods.add(new BasicAuthentication(proxyConfig));
     }
@@ -208,7 +209,7 @@ public class ProxyConnection extends AbstractConnection
         if (response.getStatusCode() == PROXY_AUTHENTICATION_REQUIRED)
         {
             LOG.debug("Proxy requires authentication");
-            if (request.getHeader(Authentication.PROXY_AUTHORIZATION_HEADER) == null && proxyConfig.hasAuth())
+            if (!request.isAuthComplete() && proxyConfig.hasAuth())
             {
                 List<String> challenge = response.getHeaders(Authentication.PROXY_AUTHENTICATION_HEADER);
                 if (challenge == null || challenge.size() == 0)
@@ -247,6 +248,16 @@ public class ProxyConnection extends AbstractConnection
 
     private Authentication findAuthentication(List<String> challenges)
     {
+        if (LOG.isDebugEnabled())
+        {
+            StringBuilder sb = new StringBuilder();
+            for (String challenge : challenges)
+            {
+                sb.append(challenge);
+                sb.append("\n");
+            }
+            LOG.debug("Finding authentication schemes challenges: {}",sb.toString());
+        }
         for (Authentication authMethod : authMethods)
         {
             for (String challenge : challenges)

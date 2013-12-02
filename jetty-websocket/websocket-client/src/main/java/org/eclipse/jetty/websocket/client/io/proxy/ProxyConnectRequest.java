@@ -9,11 +9,23 @@ public class ProxyConnectRequest
 {
     private ClientUpgradeRequest request;
     private HashMap<String, String> headers;
+    private boolean authComplete;
 
     public ProxyConnectRequest(ClientUpgradeRequest request)
     {
         this.request = request;
         this.headers = new HashMap<>();
+        this.authComplete = false;
+    }
+
+    public boolean isAuthComplete()
+    {
+        return authComplete;
+    }
+
+    public void setAuthComplete(boolean authComplete)
+    {
+        this.authComplete = authComplete;
     }
 
     public void addHeader(String key, String value)
