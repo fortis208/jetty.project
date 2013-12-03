@@ -34,7 +34,22 @@ public class NTLMAuthentication implements Authentication
     @Override
     public boolean handles(String challenge)
     {
-        return challenge.toLowerCase().startsWith("ntlm");
+        if (challenge.toLowerCase().startsWith("ntlm"))
+        {
+            if (getDomain() != null)
+            {
+                return true;
+            }
+            else
+            {
+                LOG.warn("Invalid credentials for NTLM proxy authentication (missing domain)");
+                return false;
+            }
+        }
+        else
+        {
+            return false;
+        }
     }
 
     @Override

@@ -174,6 +174,10 @@ public class UpgradeConnection extends AbstractConnection
                 else if (filled < 0)
                 {
                     LOG.debug("read - EOF Reached");
+                    if (endPoint.isInputShutdown())
+                    {
+                        throw new UpgradeException(request.getRequestURI(),-1,"Server unexpectedly closed the connection");
+                    }
                     return false;
                 }
                 else

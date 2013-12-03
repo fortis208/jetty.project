@@ -42,11 +42,19 @@ public class ProxyConnection extends AbstractConnection
             // start the interest in fill
             fillInterested();
         }
+
+        @Override
+        public void failed(Throwable cause)
+        {
+            super.failed(cause);
+            // Fail the connect promise when a fundamental exception during connect occurs.
+            connectPromise.failed(cause);
+        }
     }
 
     private static final int OK = 200;
     private static final int PROXY_AUTHENTICATION_REQUIRED = 407;
-    
+
     private static final Logger LOG = Log.getLogger(ProxyConnection.class);
     private final ByteBufferPool bufferPool;
     private final ConnectPromise connectPromise;
@@ -69,7 +77,7 @@ public class ProxyConnection extends AbstractConnection
         this.request = new ProxyConnectRequest(connectPromise.getRequest());
         // Setup the response parser
         this.parser = new ProxyResponseParser(new ProxyConnectResponse());
-        
+
         this.authMethods.add(new NTLMAuthentication(proxyConfig));
         this.authMethods.add(new DigestAuthentication(proxyConfig));
         this.authMethods.add(new BasicAuthentication(proxyConfig));
@@ -140,6 +148,10 @@ public class ProxyConnection extends AbstractConnection
                 else if (filled < 0)
                 {
                     LOG.debug("read - EOF Reached");
+                    if (endPoint.isInputShutdown())
+                    {
+                        throw new ProxyConnectException(request.getRequestURI(),-1,"Proxy server closed connection");
+                    }
                     return false;
                 }
                 else
@@ -224,9 +236,16 @@ public class ProxyConnection extends AbstractConnection
                     String message = "Failed to respond to proxy authentication challenge";
                     throw new ProxyConnectException(request.getRequestURI(),response.getStatusCode(),message);
                 }
-                
+
                 // apply the authentication to the next request
-                authentication.apply(request);
+                try
+                {
+                    authentication.apply(request);
+                }
+                catch (Exception e)
+                {
+                    throw new ProxyConnectException(request.getRequestURI(),e);
+                }
 
                 // reset parser
                 this.parser = new ProxyResponseParser(new ProxyConnectResponse());
@@ -242,7 +261,7 @@ public class ProxyConnection extends AbstractConnection
             String message = "Proxy CONNECT failed: " + response.getStatusCode() + " - " + response.getStatusReason();
             throw new ProxyConnectException(request.getRequestURI(),response.getStatusCode(),message);
         }
-        
+
         return true;
     }
 

@@ -131,6 +131,33 @@ public class ClientConnectTest
     }
 
     @Test
+    public void testBadHandshake_ConnectionClosed() throws Exception
+    {
+        TrackingSocket wsocket = new TrackingSocket();
+
+        URI wsUri = server.getWsUri();
+        Future<Session> future = client.connect(wsocket,wsUri);
+
+        ServerConnection connection = server.accept();
+        connection.readRequest();
+        connection.disconnect();
+
+        // The attempt to get upgrade response future should throw error
+        try
+        {
+            future.get(500,TimeUnit.MILLISECONDS);
+            Assert.fail("Expected ExecutionException -> UpgradeException");
+        }
+        catch (ExecutionException e)
+        {
+            // Expected Path
+            UpgradeException ue = assertExpectedError(e,wsocket,UpgradeException.class);
+            Assert.assertThat("UpgradeException.requestURI",ue.getRequestURI(),notNullValue());
+            Assert.assertThat("UpgradeException.requestURI",ue.getRequestURI().toASCIIString(),is(wsUri.toASCIIString()));
+        }
+    }
+
+    @Test
     public void testBadHandshake_GetOK() throws Exception
     {
         TrackingSocket wsocket = new TrackingSocket();
