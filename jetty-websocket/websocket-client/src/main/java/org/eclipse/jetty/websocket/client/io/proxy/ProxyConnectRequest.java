@@ -10,6 +10,7 @@ public class ProxyConnectRequest
     private ClientUpgradeRequest request;
     private HashMap<String, String> headers;
     private boolean authComplete;
+    private Authentication authentication;
 
     public ProxyConnectRequest(ClientUpgradeRequest request)
     {
@@ -26,6 +27,16 @@ public class ProxyConnectRequest
     public void setAuthComplete(boolean authComplete)
     {
         this.authComplete = authComplete;
+    }
+    
+    public Authentication getAuthentication()
+    {
+        return authentication;
+    }
+    
+    public void setAuthentication(Authentication authentication)
+    {
+        this.authentication = authentication;
     }
 
     public void addHeader(String key, String value)

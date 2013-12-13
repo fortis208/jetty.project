@@ -23,6 +23,7 @@ import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.ClientUpgradeResponse;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
+import org.eclipse.jetty.websocket.client.io.proxy.ProxyConnectRequest;
 import org.eclipse.jetty.websocket.client.masks.Masker;
 import org.eclipse.jetty.websocket.common.WebSocketSession;
 import org.eclipse.jetty.websocket.common.events.EventDriver;
@@ -37,6 +38,7 @@ public abstract class ConnectPromise extends FuturePromise<Session> implements R
     private final ClientUpgradeRequest request;
     private final Masker masker;
     private ClientUpgradeResponse response;
+    private ProxyConnectRequest proxyRequest;
     private boolean usingProxy = false;
 
     public ConnectPromise(WebSocketClient client, EventDriver driver, ClientUpgradeRequest request)
@@ -85,6 +87,16 @@ public abstract class ConnectPromise extends FuturePromise<Session> implements R
     public void setResponse(ClientUpgradeResponse response)
     {
         this.response = response;
+    }
+    
+    public ProxyConnectRequest getProxyRequest()
+    {
+        return this.proxyRequest;
+    }
+    
+    public void setProxyRequest(ProxyConnectRequest proxyRequest)
+    {
+        this.proxyRequest = proxyRequest;
     }
 
     public void succeeded(WebSocketSession session)

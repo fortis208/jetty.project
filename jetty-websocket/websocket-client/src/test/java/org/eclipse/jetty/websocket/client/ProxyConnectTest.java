@@ -232,7 +232,7 @@ public class ProxyConnectTest
     }
 
     @Test
-    public void testProxyConnect_ProxyServerClosesConnectionAfterAuthenticationRequired() throws Exception
+    public void testProxyConnect_NonPersistentConnection() throws Exception
     {
         TrackingSocket cliSock = new TrackingSocket();
 
@@ -245,25 +245,24 @@ public class ProxyConnectTest
         Future<Session> future = client.connect(cliSock,wsUri);
 
         final ServerConnection srvSock = server.accept();
-
         srvSock.readRequest();
         srvSock.respond("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=test\r\n\r\n");
         srvSock.flush();
         srvSock.disconnect();
+        
+        final ServerConnection srvSock2 = server.accept();
+        List<String> lines = srvSock2.readRequestLines();
+        Assert.assertThat("Authentication",lines.size(),greaterThan(2));
+        Assert.assertThat("Authentication.Header",lines.get(2).toLowerCase(),startsWith("proxy-authorization: basic"));
+        srvSock2.respond("HTTP/1.1 200 Connected\r\n\r\n");
 
-        try
-        {
-            // The attempt to get upgrade response future should throw error
-            future.get(1000,TimeUnit.MILLISECONDS);
-            Assert.fail("Expected ExecutionException -> ProxyConnectException");
-        }
-        catch (ExecutionException e)
-        {
-            // Expected Path
-            ProxyConnectException pce = assertExpectedError(e,cliSock,ProxyConnectException.class);
-            Assert.assertThat("ProxyConnectException.requestURI",pce.getRequestURI(),notNullValue());
-            Assert.assertThat("ProxyConnectException.requestURI",pce.getRequestURI().toASCIIString(),is(wsUri.toASCIIString()));
-        }
+        srvSock2.upgrade();
+
+        Session sess = future.get(500,TimeUnit.MILLISECONDS);
+        Assert.assertThat("Session",sess,notNullValue());
+
+        cliSock.assertWasOpened();
+        cliSock.assertNotClosed();
     }
 
     @Test

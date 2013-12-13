@@ -74,10 +74,16 @@ public class ProxyConnection extends AbstractConnection
         this.selector = selector;
         this.proxyConfig = connectPromise.getClient().getProxyConfiguration();
 
-        this.request = new ProxyConnectRequest(connectPromise.getRequest());
+        this.request = connectPromise.getProxyRequest();
+        if (this.request == null)
+        {
+            // create a new proxy connect request
+            this.request = new ProxyConnectRequest(connectPromise.getRequest());
+        }
         // Setup the response parser
         this.parser = new ProxyResponseParser(new ProxyConnectResponse());
 
+        // add all available authentication methods
         this.authMethods.add(new NTLMAuthentication(proxyConfig));
         this.authMethods.add(new DigestAuthentication(proxyConfig));
         this.authMethods.add(new BasicAuthentication(proxyConfig));
@@ -150,7 +156,20 @@ public class ProxyConnection extends AbstractConnection
                     LOG.debug("read - EOF Reached");
                     if (endPoint.isInputShutdown())
                     {
-                        throw new ProxyConnectException(request.getRequestURI(),-1,"Proxy server closed connection");
+                        if (request.getAuthentication() != null)
+                        {
+                            LOG.debug("Proxy server closed connection. Restarting...");
+                            disconnect(false);
+
+                            // save current proxy request so authentication can
+                            // continue on the new connection
+                            connectPromise.setProxyRequest(request);
+                            getExecutor().execute(connectPromise);
+                        }
+                        else
+                        {
+                            throw new ProxyConnectException(request.getRequestURI(),-1,"Proxy server closed connection");
+                        }
                     }
                     return false;
                 }
@@ -241,6 +260,8 @@ public class ProxyConnection extends AbstractConnection
                 try
                 {
                     authentication.apply(request);
+                    // save selected authentication in the request
+                    request.setAuthentication(authentication);
                 }
                 catch (Exception e)
                 {
@@ -267,6 +288,20 @@ public class ProxyConnection extends AbstractConnection
 
     private Authentication findAuthentication(List<String> challenges)
     {
+        Authentication method = request.getAuthentication();
+        if (method != null)
+        {
+            for (String challenge : challenges)
+            {
+                if (method.handles(challenge) && method.setChallenge(challenge))
+                {
+                    LOG.debug("Using previously set authentication scheme");
+                    return method;
+                }
+            }
+            LOG.warn("Previously authentication method found, but it can't handle the challenge");
+            return null;
+        }
         if (LOG.isDebugEnabled())
         {
             StringBuilder sb = new StringBuilder();
@@ -275,7 +310,7 @@ public class ProxyConnection extends AbstractConnection
                 sb.append(challenge);
                 sb.append("\n");
             }
-            LOG.debug("Finding authentication schemes challenges: {}",sb.toString());
+            LOG.debug("Finding authentication schemes for challenges: {}",sb.toString());
         }
         for (Authentication authMethod : authMethods)
         {
