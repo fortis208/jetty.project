@@ -289,6 +289,16 @@ public class ProxyConnection extends AbstractConnection
     private Authentication findAuthentication(List<String> challenges)
     {
         Authentication method = request.getAuthentication();
+        if (LOG.isDebugEnabled())
+        {
+            StringBuilder sb = new StringBuilder();
+            for (String challenge : challenges)
+            {
+                sb.append(challenge);
+                sb.append("\n");
+            }
+            LOG.debug("Finding authentication schemes for challenges: {}",sb.toString());
+        }
         if (method != null)
         {
             for (String challenge : challenges)
@@ -301,16 +311,6 @@ public class ProxyConnection extends AbstractConnection
             }
             LOG.warn("Previously authentication method found, but it can't handle the challenge");
             return null;
-        }
-        if (LOG.isDebugEnabled())
-        {
-            StringBuilder sb = new StringBuilder();
-            for (String challenge : challenges)
-            {
-                sb.append(challenge);
-                sb.append("\n");
-            }
-            LOG.debug("Finding authentication schemes for challenges: {}",sb.toString());
         }
         for (Authentication authMethod : authMethods)
         {
