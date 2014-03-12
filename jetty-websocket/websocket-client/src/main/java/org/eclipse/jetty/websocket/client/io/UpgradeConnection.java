@@ -28,6 +28,7 @@ import java.util.concurrent.Executor;
 import org.eclipse.jetty.io.AbstractConnection;
 import org.eclipse.jetty.io.ByteBufferPool;
 import org.eclipse.jetty.io.EndPoint;
+import org.eclipse.jetty.io.EofException;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.FutureCallback;
 import org.eclipse.jetty.util.QuotedStringTokenizer;
@@ -152,6 +153,16 @@ public class UpgradeConnection extends AbstractConnection
         getExecutor().execute(new SendUpgradeRequest());
     }
 
+    @Override
+    public void onClose()
+    {
+        super.onClose();
+        if (!connectPromise.isDone())
+        {
+            connectPromise.failed(new UpgradeException(request.getRequestURI(), new EofException()));
+        }
+    }
+    
     /**
      * Read / Parse the waiting read/fill buffer
      * 
